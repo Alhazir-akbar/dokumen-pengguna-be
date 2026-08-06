@@ -7,7 +7,7 @@ Project: Dokumen Pengguna
 ## Bagian yang akan di-edit untuk conflict
 Fitur utama: Login
 Status: In Progress
-Versi: 1.0.0
+Versi: 1.0.0asd
 
 ## Notes
 File ini dibuat untuk simulasi git conflict.
@@ -19,7 +19,7 @@ Nama: Akbar
 Role: Backend Developer
 Project: Dokumen Pengguna
 
-## Bagian yang akan di-edit untuk conflict
+## Bagian yang akan di-edit untuk conf34lict
 Fitur utama: Login
 Status: In Progress
 Versi: 1.0.0
