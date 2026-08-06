@@ -1,27 +1,33 @@
 from datetime import datetime, timedelta, timezone
 from typing import Union
 from jose import jwt
-from passlib.context import CryptContext
+import bcrypt  # Menggunakan library bcrypt langsung (tanpa passlib)
 
-SECRET_KEY = ""
+SECRET_KEY = "MBGKOPDES"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """memverifikasi apakah password yang dimasukkan cocok dengan hash di database"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Memverifikasi password menggunakan native bcrypt"""
+    plain_pwd_bytes = plain_password.encode('utf-8')
+    hashed_pwd_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(plain_pwd_bytes, hashed_pwd_bytes)
+
 def get_password_hash(password: str) -> str:
-    """Mengubah Password plain menjadi hash acak"""
-    return pwd_context.hash(password)
+    """Mengenkripsi password menggunakan native bcrypt"""
+    plain_pwd_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(plain_pwd_bytes, salt)
+    return hashed_password.decode('utf-8')
+
 def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None) -> str:
-    """membuat token jwt dengan waktu kadaluarsa"""
+    """Membuat token JWT dengan waktu kadaluarsa"""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-
+    
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
