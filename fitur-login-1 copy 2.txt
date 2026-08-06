@@ -1,0 +1,89 @@
+## File untuk Testing Conflict
+
+Nama: Akbar
+Role: Backend Developer
+Project: Dokumen Pengguna
+
+## Bagian yang akan di-edit untuk conflict
+Fitur utama: Login
+Status: In Progress
+Versi: 1.0.0asd
+
+## Notes
+File ini dibuat untuk simulasi git conflict.
+Silakan edit bagian yang sama di branch berbeda untuk menghasilkan conflict.
+
+## File untuk Testing Conflict
+
+Nama: Akbar
+Role: Backend Developer
+Project: Dokumen Pengguna
+
+## Bagian yang akan di-edit untuk conf34lict
+Fitur utama: Login
+Status: In Progress
+Versi: 1.0.0
+
+## Notes
+File ini dibuat untuk simulasi git conflict.
+Silakan edit bagian yang sama di branch berbeda untuk menghasilkan conflict.
+
+## File untuk Testing Conflict
+
+Nama: Akbar
+Role: Backend Developer
+Project: Dokumen Pengguna
+
+## Bagian yang akan di-edit untuk conflict
+Fitur utama: Login
+Status: In Progress
+Versi: 1.0.0
+
+## Notes
+File ini dibuat untuk simulasi git conflict.
+Silakan edit bagian yang sama di branch berbeda untuk menghasilkan conflict.
+
+## File untuk Testing Conflict
+
+Nama: Akbar
+Role: Backend Developer
+Project: Dokumen Pengguna
+
+## Bagian yang akan di-edit untuk conflict
+Fitur utama: Login
+Status: In Progress
+Versi: 1.0.0
+
+## Notes
+File ini dibuat untuk simulasi git conflict.
+Silakan edit bagian yang sama di branch berbeda untuk menghasilkan conflict.
+
+## File untuk Testing Conflict
+
+Nama: Akbar
+Role: Backend Developer
+Project: Dokumen Pengguna
+
+## Bagian yang akan di-edit untuk conflict
+Fitur utama: Login
+Status: In Progress
+Versi: 1.0.0
+
+## Notes
+File ini dibuat untuk simulasi git conflict.
+Silakan edit bagian yang sama di branch berbeda untuk menghasilkan conflict.
+
+## File untuk Testing Conflict
+
+Nama: Akbar
+Role: Backend Developer
+Project: Dokumen Pengguna
+
+## Bagian yang akan di-edit untuk conflict
+Fitur utama: Login
+Status: In Progress
+Versi: 1.0.0
+
+## Notes
+File ini dibuat untuk simulasi git conflict.
+Silakan edit bagian yang sama di branch berbeda untuk menghasilkan conflict.
