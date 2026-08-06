@@ -40,8 +40,7 @@ Status: In Progress
 Versi: 1.0.0
 
 ## Notes
-File ini dibuat untuk simulasi git conflict.
-Silakan edit bagian yang sama di branch berbeda untuk menghasilkan conflict.
+disini aku ubah dan ini file bersama
 
 ## File untuk Testing Conflict
 
