@@ -1,3 +1,3 @@
 nama: Muhammad Rizqi Abdi Ghifari
-alamat: bantul, pasdhjakka
+alamat: bantul, ghgfgh
 kampus: Universitas Harkat Negeri
