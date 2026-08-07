@@ -1,0 +1,15 @@
+# Mengabaikan virtual environment
+.venv/
+venv/
+ENV/
+
+# Mengabaikan database SQLite lokal
+*.db
+*.sqlite3
+
+# Mengabaikan file kompilasi Python (cache)
+**/__pycache__/
+*.py[cod]
+
+# Mengabaikan file konfigurasi rahasia (.env)
+.env
