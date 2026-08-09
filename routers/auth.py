@@ -1,28 +1,15 @@
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
-import model  # Mengimpor model.py (singular)
+import model
 import schemas
 import auth
-from database import engine, get_db
+from database import get_db
 
-# Membuat tabel di database SQLite jika belum ada saat backend dijalankan
-model.Base.metadata.create_all(bind=engine)
+router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-app = FastAPI(title="Userdoc Backend API")
-
-# Mengonfigurasi CORS agar Frontend Next.js (port 3000) bisa mengakses API ini
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.post("/api/auth/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     # 1. Periksa apakah email sudah terdaftar
     db_user_email = db.query(model.User).filter(model.User.email == user.email).first()
@@ -31,7 +18,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email sudah terdaftar"
         )
-    
+
     # 2. Periksa apakah username sudah terdaftar
     db_user_username = db.query(model.User).filter(model.User.username == user.username).first()
     if db_user_username:
@@ -39,7 +26,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username sudah terdaftar"
         )
-    
+
     # 3. Hash password dan simpan user baru
     hashed_password = auth.get_password_hash(user.password)
     new_user = model.User(
@@ -52,7 +39,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return new_user
 
-@app.post("/api/auth/login", response_model=schemas.Token)
+@router.post("/login", response_model=schemas.Token)
 def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     # 1. Cari user berdasarkan email
     user = db.query(model.User).filter(model.User.email == user_credentials.email).first()
@@ -69,19 +56,18 @@ def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
             detail="Email atau password salah"
         )
     
-    # 3. Buat token akses JWT
+    # 3. Update data Last Login di database
+    user.last_login = datetime.now(timezone.utc)
+    db.commit()
+
+    # 4. Buat token akses JWT
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth.create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
-    
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user": user
     }
-
-# Endpoint testing untuk memastikan API berjalan
-@app.get("/api/health")
-def health_check():
-    return {"status": "healthy", "message": "Backend FastAPI siap digunakan!"}
