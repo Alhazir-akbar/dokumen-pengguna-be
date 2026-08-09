@@ -192,5 +192,5 @@ def remove_workspace_member(
 
     db.delete(target_member)
     db.commit()
-    
+    #
     return {"message": "Anggota berhasil dikeluarkan dari ruang kerja"}
