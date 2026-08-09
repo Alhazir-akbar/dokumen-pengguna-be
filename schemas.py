@@ -102,7 +102,7 @@ class ProjectResponse(BaseModel):
 
 # AI RULES
 
-c# Data yang dikirim frontend saat membuat aturan AI baru
+# Data yang dikirim frontend saat membuat aturan AI baru
 class AIRuleCreate(BaseModel):
     name: str
     content: str
