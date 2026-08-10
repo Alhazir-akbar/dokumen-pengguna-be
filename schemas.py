@@ -113,7 +113,8 @@ class AIRuleResponse(BaseModel):
     name: str
     content: str
     created_at: datetime
-    project_id: int
+    project_id: Optional[int] =  None  
+    workspace_id: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -31,6 +31,7 @@ class Workspace(Base):
     owner = relationship("User", back_populates="workspaces_owned")
     members = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="workspace", cascade="all, delete-orphan")
+    ai_rules = relationship("AIRule", back_populates="workspace", cascade="all, delete-orphan")
 
 # Rapat ke kiri (tidak menjorok di dalam kelas Workspace)
 class WorkspaceMember(Base):
@@ -74,7 +75,9 @@ class AIRule(Base):
     name = Column(String, nullable=False)
     content = Column(String, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True)
 
     # Relasi
     project = relationship("Project", back_populates="ai_rules")
+    workspace = relationship("Workspace", back_populates="ai_rules")
