@@ -11,8 +11,7 @@ from routers.projects import check_workspace_access
 router = APIRouter(tags=["AI Rules"])
 
 # ATURAN AI TINGKAT PROYEK
-@router.POST("/api/projects/{priject_id}/ai-rules", response_model=schemas.AIRuleResponse,
-status_code=status.HTTP_201_CREATED)
+@router.post("/api/projects/{project_id}/ai-rules", response_model=schemas.AIRuleResponse, status_code=status.HTTP_201_CREATED)
 def create_project_ai_rule(
     project_id: int,
     rule_data: schemas.AIRuleCreate,
@@ -71,7 +70,7 @@ def get_project_ai_rules(
 
 # ATURANAI TINGKAT TIM / WORKSPACE
 
-@router.post("/api/workspace/{workspace_id}/ai_rules", response_model=schemas.AIRuleResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/api/workspaces/{workspace_id}/ai-rules", response_model=schemas.AIRuleResponse, status_code=status.HTTP_201_CREATED)
 def create_workspace_ai_rule(
     workspace_id: int,
     rule_data: schemas.AIRuleCreate,

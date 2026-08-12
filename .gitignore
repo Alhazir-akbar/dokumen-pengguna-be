@@ -13,3 +13,9 @@ ENV/
 
 # Mengabaikan file konfigurasi rahasia (.env)
 .env
+
+# Mengabaikan folder penyimpanan data MinIO
+minio_data/
+
+# Mengabaikan folder binary MinIO (berisi .exe MinIO yang besar)
+minio/

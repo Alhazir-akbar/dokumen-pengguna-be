@@ -6,6 +6,7 @@ import model
 import schemas
 import auth
 from database import get_db
+from services.ai import generate_project_requirements
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
@@ -164,3 +165,62 @@ def delete_project(
     db.commit()
     
     return {"message": "Proyek berhasil dihapus"}
+
+@router.post("/{id}/generate-requirements")
+def generate_requirements(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Memanggil Gemini AI untuk menghasilkan draf kebutuhan proyek secara otomatis"""
+    # 1. Cari proyek berdasarkan ID
+    project = db.query(model.Project).filter(model.Project.id == id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Proyek tidak ditemukan"
+        )
+
+    # 2. Validasi akses (Hanya Owner dan Editor yang boleh memicu AI)
+    check_workspace_access(
+        workspace_id=project.workspace_id,
+        user_id=current_user.id,
+        db=db,
+        required_roles=["owner", "editor"]
+    )
+
+    # 3. Kumpulkan seluruh aturan AI aktif (Tingkat Proyek & Tingkat Workspace)
+    # A. Ambil aturan khusus proyek ini
+    project_rules = db.query(model.AIRule).filter(model.AIRule.project_id == id).all()
+    
+    # B. Ambil aturan umum tingkat workspace (yang tidak terikat ke proyek lain)
+    workspace_rules = db.query(model.AIRule).filter(
+        model.AIRule.workspace_id == project.workspace_id,
+        model.AIRule.project_id == None
+    ).all()
+    
+    # C. Gabungkan isi konten teks dari semua aturan tersebut
+    all_rules_text = []
+    for rule in project_rules:
+        all_rules_text.append(rule.content)
+    for rule in workspace_rules:
+        all_rules_text.append(rule.content)
+
+    # 4. Panggil helper Gemini AI
+    try:
+        requirements_draft = generate_project_requirements(
+            project_name=project.name,
+            project_description=project.description or "",
+            application_type=project.application_type or "",
+            domain_business=project.domain_business or "",
+            target_users=project.target_users or "",
+            business_goals=project.business_goals or "",
+            ai_rules=all_rules_text
+        )
+        return requirements_draft
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI gagal memproses data: {str(e)}"
+        )
