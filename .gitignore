@@ -1,0 +1,7 @@
+.venv/
+venv/
+*.db
+.env
+__pycache__/
+minio/
+minio_data/
