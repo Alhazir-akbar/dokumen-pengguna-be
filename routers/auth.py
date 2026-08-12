@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
+from jose import jwt, JWTError
 
 import model
 import schemas
@@ -11,7 +12,7 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    # 1. Periksa apakah email sudah terdaftar
+    #  Periksa apakah email sudah terdaftar
     db_user_email = db.query(model.User).filter(model.User.email == user.email).first()
     if db_user_email:
         raise HTTPException(
@@ -19,7 +20,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
             detail="Email sudah terdaftar"
         )
 
-    # 2. Periksa apakah username sudah terdaftar
+    #  Periksa apakah username sudah terdaftar
     db_user_username = db.query(model.User).filter(model.User.username == user.username).first()
     if db_user_username:
         raise HTTPException(
@@ -27,7 +28,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
             detail="Username sudah terdaftar"
         )
 
-    # 3. Hash password dan simpan user baru
+    #  Hash password dan simpan user baru
     hashed_password = auth.get_password_hash(user.password)
     new_user = model.User(
         username=user.username,
@@ -41,7 +42,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=schemas.Token)
 def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
-    # 1. Cari user berdasarkan email
+    #  Cari user berdasarkan email
     user = db.query(model.User).filter(model.User.email == user_credentials.email).first()
     if not user:
         raise HTTPException(
@@ -49,18 +50,18 @@ def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
             detail="Email atau password salah"
         )
     
-    # 2. Verifikasi password
+    #  Verifikasi password
     if not auth.verify_password(user_credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email atau password salah"
         )
     
-    # 3. Update data Last Login di database
+    #  Update data Last Login di database
     user.last_login = datetime.now(timezone.utc)
     db.commit()
 
-    # 4. Buat token akses JWT
+    # Buat token akses JWT
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth.create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
@@ -71,3 +72,54 @@ def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user
     }
+
+@router.post("/forgot-password")
+def forgot_password(request: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    # Cari user berdasarkan email
+    user = db.query(model.User).filter(model.User.email == request.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email tidak terdaftar"
+        )
+    #  Buat Token Reset JWT (Masa berlaku 15 menit)
+    reset_token_expires = timedelta(minutes=15)
+    reset_token = auth.create_access_token(
+        data={"sub": user.email, "type": "reset"}, 
+        expires_delta=reset_token_expires
+    )
+    #  Simulasi Pengiriman Email: Cetak link reset ke terminal console
+    reset_link = f"http://localhost:3000/reset-password?token={reset_token}"
+    print("\n" + "="*60)
+    print("MOCK EMAIL SYSTEM - LINK RESET PASSWORD")
+    print(f"Kirim Ke: {user.email}")
+    print(f"Link Reset: {reset_link}")
+    print("="*60 + "\n")
+    return {"message": "Link reset password berhasil dikirim ke email (Simulasi)"}
+@router.post("/reset-password")
+def reset_password(request: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Token reset tidak valid atau telah kedaluwarsa"
+    )
+    
+    try:
+        #  Dekode dan verifikasi token
+        payload = jwt.decode(request.token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
+        email: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
+        # Validasi tipe token untuk memastikan ini adalah token reset
+        if email is None or token_type != "reset":
+            raise credentials_exception
+            
+    except JWTError:
+        raise credentials_exception
+    #  Cari user yang memiliki email tersebut
+    user = db.query(model.User).filter(model.User.email == email).first()
+    if not user:
+        raise credentials_exception
+    #  Hash password baru dan simpan ke database
+    user.hashed_password = auth.get_password_hash(request.new_password)
+    db.commit()
+    return {"message": "Password berhasil diperbarui"}

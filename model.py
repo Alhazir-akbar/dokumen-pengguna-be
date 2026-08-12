@@ -33,7 +33,7 @@ class Workspace(Base):
     projects = relationship("Project", back_populates="workspace", cascade="all, delete-orphan")
     ai_rules = relationship("AIRule", back_populates="workspace", cascade="all, delete-orphan")
 
-# Rapat ke kiri (tidak menjorok di dalam kelas Workspace)
+
 class WorkspaceMember(Base):
     __tablename__ = "workspace_members"
 
@@ -47,14 +47,14 @@ class WorkspaceMember(Base):
     workspace = relationship("Workspace", back_populates="members")
     user = relationship("User", back_populates="workspace_memberships")
 
-# Rapat ke kiri (tidak menjorok di dalam kelas Workspace)
+
 class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    application_type = Column(String, nullable=True)  # Dieja benar: application_type
+    application_type = Column(String, nullable=True)  
     domain_business = Column(String, nullable=True)
     target_users = Column(String, nullable=True)
     business_goals = Column(String, nullable=True)
@@ -67,6 +67,10 @@ class Project(Base):
     workspace = relationship("Workspace", back_populates="projects")
     creator = relationship("User", back_populates="projects_created")
     ai_rules = relationship("AIRule", back_populates="project", cascade="all, delete-orphan")
+    user_types = relationship("UserType", back_populates="project", cascade="all, delete-orphan")
+    epics = relationship("Epic", back_populates="project", cascade="all, delete-orphan")
+    nfrs = relationship("NFR", back_populates="project", cascade="all, delete-orphan")
+    user_journeys = relationship("UserJourney", back_populates="project", cascade="all, delete-orphan")
 
 class AIRule(Base):
     __tablename__ = "ai_rules"
@@ -81,3 +85,97 @@ class AIRule(Base):
     # Relasi
     project = relationship("Project", back_populates="ai_rules")
     workspace = relationship("Workspace", back_populates="ai_rules")
+
+class UserType(Base):
+    __tablename__ = "user_types"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    # Relasi
+    project = relationship("Project", back_populates="user_types")
+    personas = relationship("Persona", back_populates="user_type", cascade="all, delete-orphan")
+    stories = relationship("UserStory", back_populates="user_type")
+    
+class Persona(Base):
+    __tablename__ = "personas"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    avatar_url = Column(String, nullable=True)
+    age = Column(Integer, nullable=True)
+    location = Column(String, nullable=True)
+    family_status = Column(String, nullable=True)
+    job_title = Column(String, nullable=True)
+    about = Column(String, nullable=True)
+    goals = Column(String, nullable=True)  # Menyimpan teks biasa atau JSON stringified
+    frustrations = Column(String, nullable=True)  # Menyimpan teks biasa atau JSON stringified
+    user_type_id = Column(Integer, ForeignKey("user_types.id"), nullable=False)
+    # Relasi
+    user_type = relationship("UserType", back_populates="personas")
+    journey_steps = relationship("JourneyStep", back_populates="persona")
+
+class Epic(Base):
+    __tablename__ = "epics"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    # Relasi
+    project = relationship("Project", back_populates="epics")
+    stories = relationship("UserStory", back_populates="epic", cascade="all, delete-orphan")
+
+class UserStory(Base):
+    __tablename__ = "user_stories"
+    id = Column(Integer, primary_key=True, index=True)
+    epic_id = Column(Integer, ForeignKey("epics.id"), nullable=False)
+    user_type_id = Column(Integer, ForeignKey("user_types.id"), nullable=True)
+    code = Column(String, nullable=True)  # US-1.1
+    as_a = Column(String, nullable=True)
+    i_want = Column(String, nullable=False)
+    so_that = Column(String, nullable=True)
+    status = Column(String, default="draft")  # draft, review, approved
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    # Relasi
+    epic = relationship("Epic", back_populates="stories")
+    user_type = relationship("UserType", back_populates="stories")
+    acceptance_criteria = relationship("AcceptanceCriteria", back_populates="user_story", cascade="all, delete-orphan")
+
+class AcceptanceCriteria(Base):
+    __tablename__ = "acceptance_criteria"
+    id = Column(Integer, primary_key=True, index=True)
+    user_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
+    description = Column(String, nullable=False)
+    # Relasi
+    user_story = relationship("UserStory", back_populates="acceptance_criteria")
+
+class NFR(Base):
+    __tablename__ = "nfrs"
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    # Relasi
+    project = relationship("Project", back_populates="nfrs")
+
+class UserJourney(Base):
+    __tablename__ = "user_journeys"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    # Relasi
+    project = relationship("Project", back_populates="user_journeys")
+    steps = relationship("JourneyStep", back_populates="user_journey", cascade="all, delete-orphan")
+
+class JourneyStep(Base):
+    __tablename__ = "journey_steps"
+    id = Column(Integer, primary_key=True, index=True)
+    user_journey_id = Column(Integer, ForeignKey("user_journeys.id"), nullable=False)
+    persona_id = Column(Integer, ForeignKey("personas.id"), nullable=True)
+    step_order = Column(Integer, nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    # Relasi
+    user_journey = relationship("UserJourney", back_populates="steps")
+    persona = relationship("Persona", back_populates="journey_steps")
