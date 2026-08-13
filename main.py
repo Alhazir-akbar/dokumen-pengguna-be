@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routers.users import router as users_router
+from routers.stories import router as stories_router
+from routers.journeys import router as journeys_router
 
 import model
 from database import engine
@@ -31,6 +34,9 @@ app.include_router(workspaces_router)
 app.include_router(projects_router)
 app.include_router(ai_rules_router)
 app.include_router(profile_router)
+app.include_router(users_router)
+app.include_router(stories_router)
+app.include_router(journeys_router)
 
 # Endpoint testing status
 @app.get("/api/health")

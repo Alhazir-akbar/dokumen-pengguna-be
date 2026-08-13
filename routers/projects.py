@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+from services.ai import ProjectRequirementsOutput
 
 import model
 import schemas
@@ -224,3 +225,83 @@ def generate_requirements(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI gagal memproses data: {str(e)}"
         )
+@router.post("/{id}/save-requirements", status_code=status.HTTP_201_CREATED)
+def save_project_requirements(
+    id: int,
+    requirements: ProjectRequirementsOutput,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Menyimpan draf kebutuhan proyek (User Types, Epics, Stories, NFRs) hasil generate AI ke database"""
+    project = db.query(model.Project).filter(model.Project.id == id).first()
+    if not project: 
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Proyek tidak ditemukan"
+        )
+    check_workspace_access(
+        workspace_id=project.workspace_id,
+        user_id=current_user.id,
+        db=db,
+        required_roles=["owner", "editor"]
+    )
+
+    user_type_map = {}
+    for ut_data in requirements.user_types:
+        db_ut = model.UserType(
+            name=ut_data.name,
+            description=ut_data.description,
+            project_id=id
+        )
+        db.add(db_ut)
+        db.commit()
+        db.refresh(db_ut)
+        user_type_map[ut_data.name] = db_ut.id
+
+    epic_map = {}
+    for epic_data in requirements.epics:
+        db_epic = model.Epic(
+        name=epic_data.name,
+        description=epic_data.description,
+        project_id=id
+    )
+    db.add(db_epic)
+    db.commit()
+    db.refresh(db_epic)
+    epic_map[epic_data.name] = db_epic.id
+
+    for story_data in requirements.user_stories:
+        epic_id = epic_map.get(story_data.epic_name)
+        user_type_id = user_type_map.get(story_data.user_type)
+        
+        db_story = model.UserStory(
+            epic_id=epic_id,
+            user_type_id=user_type_id,
+            as_a=story_data.user_type,
+            i_want=story_data.story_name,
+            so_that=story_data.description,
+            status="draft",
+            project_id=id
+        )
+        db.add(db_story)
+        db.commit()
+        db.refresh(db_story)
+        # Simpan Acceptance Criteria untuk story ini
+        for ac_desc in story_data.acceptance_criteria:
+            db_ac = model.AcceptanceCriteria(
+                user_story_id=db_story.id,
+                description=ac_desc
+            )
+            db.add(db_ac)
+            
+    # 5. Simpan NFRs
+    for nfr_data in requirements.nfrs:
+        db_nfr = model.NFR(
+            category=nfr_data.category,
+            description=nfr_data.description,
+            project_id=id
+        )
+        db.add(db_nfr)
+        
+    db.commit()
+    return {"message": "Draf kebutuhan proyek berhasil disimpan ke database"}
