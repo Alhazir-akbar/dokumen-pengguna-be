@@ -244,3 +244,64 @@ class UserJourneyResponse(BaseModel):
     steps: List[JourneyStepResponse] = []
     class Config:
         from_attributes = True
+# ===== FR007: BUILD MODULE =====
+
+# Tech Stack
+class TechStackUpdate(BaseModel):
+    ui_layer: Optional[str] = None
+    app_layer: Optional[str] = None
+    data_layer: Optional[str] = None
+    integration_layer: Optional[str] = None
+
+class TechStackResponse(BaseModel):
+    id: int
+    project_id: int
+    ui_layer: Optional[str] = None
+    app_layer: Optional[str] = None
+    data_layer: Optional[str] = None
+    integration_layer: Optional[str] = None
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Coding Guidelines
+class CodingGuidelineCreate(BaseModel):
+    title: str
+    content: str
+
+class CodingGuidelineUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+
+class CodingGuidelineResponse(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Development Plans
+class DevelopmentPlanCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: Optional[str] = "todo"
+
+class DevelopmentPlanUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None  # todo | in_progress | done
+
+class DevelopmentPlanResponse(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    description: Optional[str] = None
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

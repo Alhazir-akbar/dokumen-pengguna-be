@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers.users import router as users_router
 from routers.stories import router as stories_router
 from routers.journeys import router as journeys_router
+from routers.build import router as build_router
 
 import model
 from database import engine
@@ -30,6 +31,7 @@ app.add_middleware(
 
 # Mendaftarkan router modular ke dalam aplikasi FastAPI
 app.include_router(auth_router)
+app.include_router(build_router)
 app.include_router(workspaces_router)
 app.include_router(projects_router)
 app.include_router(ai_rules_router)

@@ -71,6 +71,9 @@ class Project(Base):
     epics = relationship("Epic", back_populates="project", cascade="all, delete-orphan")
     nfrs = relationship("NFR", back_populates="project", cascade="all, delete-orphan")
     user_journeys = relationship("UserJourney", back_populates="project", cascade="all, delete-orphan")
+    tech_stack = relationship("TechStack", back_populates="project", uselist=False)
+    coding_guidelines = relationship("CodingGuideline", back_populates="project", cascade="all, delete-orphan")
+    development_plans = relationship("DevelopmentPlan", back_populates="project", cascade="all, delete-orphan")
 
 class AIRule(Base):
     __tablename__ = "ai_rules"
@@ -179,3 +182,46 @@ class JourneyStep(Base):
     # Relasi
     user_journey = relationship("UserJourney", back_populates="steps")
     persona = relationship("Persona", back_populates="journey_steps")
+
+# ===== FR007: BUILD MODULE =====
+
+class TechStack(Base):
+    __tablename__ = "tech_stacks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    ui_layer = Column(String, nullable=True)        # Contoh: React, Next.js, Vue
+    app_layer = Column(String, nullable=True)       # Contoh: FastAPI, Django, Express
+    data_layer = Column(String, nullable=True)      # Contoh: PostgreSQL, SQLite, MongoDB
+    integration_layer = Column(String, nullable=True)  # Contoh: REST API, GraphQL
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relasi
+    project = relationship("Project", back_populates="tech_stack")
+
+
+class CodingGuideline(Base):
+    __tablename__ = "coding_guidelines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    title = Column(String, nullable=False)
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relasi
+    project = relationship("Project", back_populates="coding_guidelines")
+
+
+class DevelopmentPlan(Base):
+    __tablename__ = "development_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    status = Column(String, default="todo")  # todo | in_progress | done
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relasi
+    project = relationship("Project", back_populates="development_plans")
