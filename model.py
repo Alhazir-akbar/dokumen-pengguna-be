@@ -9,12 +9,11 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)  # Hanya menyimpan password terenkripsi
+    hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     last_login = Column(DateTime, nullable=True)
 
-    # Relasi
     workspaces_owned = relationship("Workspace", back_populates="owner")
     workspace_memberships = relationship("WorkspaceMember", back_populates="user")
     projects_created = relationship("Project", back_populates="creator")
@@ -27,7 +26,6 @@ class Workspace(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # Relasi
     owner = relationship("User", back_populates="workspaces_owned")
     members = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="workspace", cascade="all, delete-orphan")
@@ -40,10 +38,9 @@ class WorkspaceMember(Base):
     id = Column(Integer, primary_key=True, index=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    role = Column(String, default="viewer")  # "owner", "editor", "viewer"
+    role = Column(String, default="viewer")
     joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    # Relasi
     workspace = relationship("Workspace", back_populates="members")
     user = relationship("User", back_populates="workspace_memberships")
 
@@ -54,7 +51,7 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    application_type = Column(String, nullable=True)  
+    application_type = Column(String, nullable=True)
     domain_business = Column(String, nullable=True)
     target_users = Column(String, nullable=True)
     business_goals = Column(String, nullable=True)
@@ -63,7 +60,6 @@ class Project(Base):
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # Relasi
     workspace = relationship("Workspace", back_populates="projects")
     creator = relationship("User", back_populates="projects_created")
     ai_rules = relationship("AIRule", back_populates="project", cascade="all, delete-orphan")
@@ -85,7 +81,6 @@ class AIRule(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True)
 
-    # Relasi
     project = relationship("Project", back_populates="ai_rules")
     workspace = relationship("Workspace", back_populates="ai_rules")
 
@@ -95,11 +90,10 @@ class UserType(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    # Relasi
     project = relationship("Project", back_populates="user_types")
     personas = relationship("Persona", back_populates="user_type", cascade="all, delete-orphan")
     stories = relationship("UserStory", back_populates="user_type")
-    
+
 class Persona(Base):
     __tablename__ = "personas"
     id = Column(Integer, primary_key=True, index=True)
@@ -110,10 +104,9 @@ class Persona(Base):
     family_status = Column(String, nullable=True)
     job_title = Column(String, nullable=True)
     about = Column(String, nullable=True)
-    goals = Column(String, nullable=True)  # Menyimpan teks biasa atau JSON stringified
-    frustrations = Column(String, nullable=True)  # Menyimpan teks biasa atau JSON stringified
+    goals = Column(String, nullable=True)
+    frustrations = Column(String, nullable=True)
     user_type_id = Column(Integer, ForeignKey("user_types.id"), nullable=False)
-    # Relasi
     user_type = relationship("UserType", back_populates="personas")
     journey_steps = relationship("JourneyStep", back_populates="persona")
 
@@ -123,7 +116,6 @@ class Epic(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    # Relasi
     project = relationship("Project", back_populates="epics")
     stories = relationship("UserStory", back_populates="epic", cascade="all, delete-orphan")
 
@@ -132,25 +124,44 @@ class UserStory(Base):
     id = Column(Integer, primary_key=True, index=True)
     epic_id = Column(Integer, ForeignKey("epics.id"), nullable=False)
     user_type_id = Column(Integer, ForeignKey("user_types.id"), nullable=True)
-    code = Column(String, nullable=True)  # US-1.1
+    code = Column(String, nullable=True)
     as_a = Column(String, nullable=True)
     i_want = Column(String, nullable=False)
     so_that = Column(String, nullable=True)
-    status = Column(String, default="draft")  # draft, review, approved
+    status = Column(String, default="draft")
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    # Relasi
+
     epic = relationship("Epic", back_populates="stories")
     user_type = relationship("UserType", back_populates="stories")
     acceptance_criteria = relationship("AcceptanceCriteria", back_populates="user_story", cascade="all, delete-orphan")
+    # TAMBAHAN: relasi ke Tech Notes & Test Cases, supaya story punya dokumentasi teknis
+    # dan skenario pengujian yang lengkap, bukan cuma acceptance criteria saja.
+    tech_notes = relationship("TechNote", back_populates="user_story", cascade="all, delete-orphan")
+    test_cases = relationship("TestCase", back_populates="user_story", cascade="all, delete-orphan")
 
 class AcceptanceCriteria(Base):
     __tablename__ = "acceptance_criteria"
     id = Column(Integer, primary_key=True, index=True)
     user_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
     description = Column(String, nullable=False)
-    # Relasi
     user_story = relationship("UserStory", back_populates="acceptance_criteria")
+
+# ================= TAMBAHAN: TECH NOTES =================
+class TechNote(Base):
+    __tablename__ = "tech_notes"
+    id = Column(Integer, primary_key=True, index=True)
+    user_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
+    content = Column(String, nullable=False)
+    user_story = relationship("UserStory", back_populates="tech_notes")
+
+# ================= TAMBAHAN: TEST CASES =================
+class TestCase(Base):
+    __tablename__ = "test_cases"
+    id = Column(Integer, primary_key=True, index=True)
+    user_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
+    description = Column(String, nullable=False)
+    user_story = relationship("UserStory", back_populates="test_cases")
 
 class NFR(Base):
     __tablename__ = "nfrs"
@@ -158,7 +169,6 @@ class NFR(Base):
     category = Column(String, nullable=False)
     description = Column(String, nullable=False)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    # Relasi
     project = relationship("Project", back_populates="nfrs")
 
 class UserJourney(Base):
@@ -167,7 +177,6 @@ class UserJourney(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    # Relasi
     project = relationship("Project", back_populates="user_journeys")
     steps = relationship("JourneyStep", back_populates="user_journey", cascade="all, delete-orphan")
 
@@ -179,7 +188,6 @@ class JourneyStep(Base):
     step_order = Column(Integer, nullable=False)
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    # Relasi
     user_journey = relationship("UserJourney", back_populates="steps")
     persona = relationship("Persona", back_populates="journey_steps")
 

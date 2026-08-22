@@ -1,4 +1,3 @@
-# routers/stories.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -55,3 +54,48 @@ def delete_story(id: int, db: Session = Depends(get_db), current_user: model.Use
     db.delete(db_story)
     db.commit()
     return {"message": "User story berhasil dihapus"}
+
+# ================= TAMBAHAN: BATCH SAVE DARI WIZARD =================
+@router.post("/batch", status_code=status.HTTP_201_CREATED)
+def save_wizard_stories_batch(
+    project_id: int, 
+    data: schemas.WizardBatchCreateSchema, 
+    db: Session = Depends(get_db), 
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Menyimpan seluruh Epics dan User Stories hasil wizard frontend secara sekaligus"""
+
+    for epic_data in data.epics:
+        db_epic = model.Epic(
+            name=epic_data.name,
+            description=epic_data.description,
+            project_id=project_id
+        )
+        db.add(db_epic)
+        db.commit()
+        db.refresh(db_epic)
+
+        # Simpan stories yang terikat ke epic ini.
+        # model.UserStory TIDAK punya field storyName/userType/description —
+        # field itu perlu di-mapping ke i_want / as_a / so_that.
+        for story_data in epic_data.stories:
+            # Cari UserType yang namanya cocok di project ini (kalau ada),
+            # supaya story bisa terhubung ke user_type_id yang benar.
+            user_type = db.query(model.UserType).filter(
+                model.UserType.project_id == project_id,
+                model.UserType.name == story_data.userType
+            ).first()
+
+            db_story = model.UserStory(
+                epic_id=db_epic.id,
+                user_type_id=user_type.id if user_type else None,
+                as_a=story_data.userType,
+                i_want=story_data.storyName,
+                so_that=story_data.description,
+                status="draft",
+                project_id=project_id
+            )
+            db.add(db_story)
+
+    db.commit()
+    return {"message": "Semua data wizard berhasil disimpan ke database!"}

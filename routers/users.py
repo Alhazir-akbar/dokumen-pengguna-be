@@ -22,6 +22,26 @@ def create_user_type(data: schemas.UserTypeCreate, db: Session = Depends(get_db)
     db.refresh(db_ut)
     return db_ut
 
+# ================= TAMBAHAN: UPDATE USER TYPE =================
+# Sebelumnya tidak ada endpoint PUT, jadi fitur "Edit" di frontend
+# tidak pernah benar-benar menyimpan perubahan ke database.
+@router.put("/types/{id}", response_model=schemas.UserTypeResponse)
+def update_user_type(
+    id: int,
+    data: schemas.UserTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_ut = db.query(model.UserType).filter(model.UserType.id == id).first()
+    if not db_ut:
+        raise HTTPException(status_code=404, detail="User type tidak ditemukan")
+
+    db_ut.name = data.name
+    db_ut.description = data.description
+    db.commit()
+    db.refresh(db_ut)
+    return db_ut
+
 @router.delete("/types/{id}")
 def delete_user_type(id: int, db: Session = Depends(get_db), current_user: model.User = Depends(auth.get_current_user)):
     db_ut = db.query(model.UserType).filter(model.UserType.id == id).first()
@@ -35,6 +55,25 @@ def delete_user_type(id: int, db: Session = Depends(get_db), current_user: model
 def create_persona(data: schemas.PersonaCreate, db: Session = Depends(get_db), current_user: model.User = Depends(auth.get_current_user)):
     db_persona = model.Persona(**data.model_dump())
     db.add(db_persona)
+    db.commit()
+    db.refresh(db_persona)
+    return db_persona
+
+# ================= TAMBAHAN: UPDATE PERSONA =================
+@router.put("/personas/{id}", response_model=schemas.PersonaResponse)
+def update_persona(
+    id: int,
+    data: schemas.PersonaCreate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_persona = db.query(model.Persona).filter(model.Persona.id == id).first()
+    if not db_persona:
+        raise HTTPException(status_code=404, detail="Persona tidak ditemukan")
+
+    for key, value in data.model_dump().items():
+        setattr(db_persona, key, value)
+
     db.commit()
     db.refresh(db_persona)
     return db_persona
