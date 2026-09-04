@@ -1,72 +1,36 @@
 import os
 import json
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from google import genai
 from google.genai import types
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ================= SKEMA OUTPUT TERSTRUKTUR UNTUK AI =================
+# ================= SKEMA DATA PYDANTIC =================
 
 class UserTypeSuggestion(BaseModel):
-    name: str = Field(description="Nama tipe pengguna/persona (misal: Guest User, Admin, Operator)")
-    description: str = Field(
-        description=(
-            "Penjelasan rinci (8-15 kalimat) siapa mereka, apa peran/tanggung jawab mereka "
-            "di aplikasi, dan hak akses tingkat tinggi apa yang mereka miliki dibanding tipe user lain. "
-            "Sebutkan juga contoh tujuan utama mereka menggunakan sistem ini."
-        )
-    )
+    name: str = Field(description="Nama tipe pengguna/persona")
+    description: str = Field(description="Penjelasan peran dan tanggung jawab pengguna")
 
 class EpicSuggestion(BaseModel):
-    name: str = Field(description="Kategori fitur besar/modul aplikasi (misal: Autentikasi & Manajemen Akun, Dashboard Analitik)")
-    description: str = Field(
-        description=(
-            "Ringkasan modul/fitur yang berada di bawah Epic ini (8-15 kalimat), termasuk tujuan "
-            "bisnisnya, dan batasan cakupan eksplisit (apa yang termasuk dan tidak termasuk dalam epic ini) "
-            "supaya tidak tumpang tindih dengan Epic lain."
-        )
-    )
+    name: str = Field(description="Kategori modul/fitur besar")
+    description: str = Field(description="Tujuan dan batasan cakupan modul")
 
 class UserStorySuggestion(BaseModel):
-    epic_name: str = Field(description="Nama Epic tempat story ini bernaung (harus cocok persis dengan salah satu nama Epic di atas)")
-    story_name: str = Field(description="Judul singkat cerita pengguna (misal: Registrasi Akun Pengguna Baru, Filter Data Berdasarkan Kategori)")
-    user_type: str = Field(description="Nama tipe pengguna yang melakukan aksi ini (harus cocok persis dengan salah satu User Type di atas)")
-    description: str = Field(
-        description=(
-            "Deskripsi lengkap minimal 8-12 kalimat dengan struktur berikut dalam satu paragraf naratif:\n"
-            "(1) Format inti: 'Sebagai [user_type], saya ingin [aksi spesifik], agar [manfaat/tujuan bisnis]'.\n"
-            "(2) Alur utama (main flow) langkah demi langkah dari awal sampai selesai.\n"
-            "(3) Kondisi khusus/edge case yang relevan dan perilaku sistem.\n"
-            "(4) Prasyarat atau ketergantungan sistem."
-        )
-    )
-    acceptance_criteria: List[str] = Field(
-        description=(
-            "Minimal 6 dan maksimal 10 kriteria penerimaan yang spesifik dan terukur dalam format 'Given [kondisi], When [aksi], Then [hasil]'. "
-            "Wajib mencakup kombinasi happy path dan skenario validasi error handling dengan batasan angka konkret."
-        )
-    )
-    tech_notes: List[str] = Field(
-        description=(
-            "Minimal 6 dan maksimal 10 catatan teknis pertimbangan implementasi developer (struktur database, endpoint API, aturan validasi, keamanan, performa)."
-        )
-    )
-    test_cases: List[str] = Field(
-        description=(
-            "Minimal 6 dan maksimal 10 skenario pengujian QA dengan format '[Nama skenario]: Langkah = [...], Hasil = [...]'."
-        )
-    )
+    epic_name: str = Field(description="Nama Epic induk")
+    story_name: str = Field(description="Judul cerita pengguna")
+    user_type: str = Field(description="Aktor/User type yang menjalankan")
+    description: str = Field(description="Sebagai [user], saya ingin [fitur] agar [manfaat]")
+    acceptance_criteria: List[str] = Field(description="Daftar kriteria penerimaan format Given-When-Then")
+    tech_notes: Optional[List[str]] = Field(default=[], description="Catatan teknis arsitektur")
+    test_cases: Optional[List[str]] = Field(default=[], description="Skenario pengujian QA")
 
 class NFRSuggestion(BaseModel):
-    category: str = Field(
-        description="Kategori NFR (Performance, Security, Availability, Usability, Scalability, Compliance)."
-    )
-    description: str = Field(
-        description="Detail kebutuhan non-fungsional dengan target kuantitatif/terukur yang jelas beserta standar verifikasinya."
-    )
+    category: str = Field(description="Kategori NFR (Performance, Security, Availability, dll)")
+    description: str = Field(description="Target kuantitatif terukur")
 
 class ProjectRequirementsOutput(BaseModel):
     user_types: List[UserTypeSuggestion]
@@ -74,13 +38,29 @@ class ProjectRequirementsOutput(BaseModel):
     user_stories: List[UserStorySuggestion]
     nfrs: List[NFRSuggestion]
 
-# ================= INISIALISASI GEMINI CLIENT =================
 
-api_key = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+# ================= CLIENT INITIALIZATION =================
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+# 1. Gemini Client
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
+# 2. OpenRouter Client (OpenAI-Compatible)
+openrouter_client = OpenAI(
+    base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+    api_key=os.getenv("OPENROUTER_API_KEY", "")
+)
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+
+# 3. Groq Client (OpenAI-Compatible)
+groq_client = OpenAI(
+    base_url=os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+    api_key=os.getenv("GROQ_API_KEY", "")
+)
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+
+# ================= CORE ENGINE FUNCTIONS =================
 
 def generate_project_requirements(
     project_name: str,
@@ -92,124 +72,93 @@ def generate_project_requirements(
     ai_rules: List[str]
 ) -> ProjectRequirementsOutput:
     """
-    Memanggil Gemini API untuk menghasilkan draf dokumentasi kebutuhan software dengan tingkat kedalaman tinggi.
+    Menghasilkan dokumentasi lengkap tanpa batas 4 dengan orkestrasi Multi-AI.
     """
-    if ai_rules:
-        rules_prompt = "\n".join([f"- {rule}" for rule in ai_rules])
-    else:
-        rules_prompt = "- Tidak ada aturan khusus. Tulis dengan standar profesional umum."
+    rules_text = "\n".join([f"- {r}" for r in ai_rules]) if ai_rules else "- Standar industri profesional."
 
-    prompt = f"""
-    Anda adalah seorang Senior Business Analyst dan System Analyst profesional dengan pengalaman lebih dari 10 tahun. 
-    Buatlah dokumentasi kebutuhan software yang sangat detail, mendalam, dan siap pakai untuk tim engineering profesional.
-
-    DETAIL PROYEK:
+    # TAHAP 1: Gemini merancang Kerangka Utama (User Types, Epics, NFR)
+    prompt_stage1 = f"""
+    Bertindaklah sebagai Senior System Architect. Rancang kerangka arsitektur untuk proyek berikut:
     Nama Proyek: {project_name}
     Deskripsi: {project_description}
-    Tipe Aplikasi: {application_type}
-    Domain Bisnis: {domain_business}
-    Target Pengguna: {target_users}
-    Tujuan Bisnis: {business_goals}
+    Tipe: {application_type} | Domain: {domain_business}
+    Target User: {target_users} | Tujuan: {business_goals}
+    Aturan Khusus: {rules_text}
 
-    ATURAN KHUSUS AI (WAJIB DIPATUHI):
-    {rules_prompt}
-
-    INSTRUKSI PENYUSUNAN (DETAIL & KOMPREHENSIF):
-
-    1. USER TYPES
-       - Identifikasi 4-6 tipe pengguna utama yang relevan secara komprehensif.
-       - Jelaskan peran, tanggung jawab, dan tingkat akses masing-masing secara mendalam.
-       - Setiap tipe pengguna harus memiliki deskripsi rinci (8-15 kalimat) yang mencakup tujuan utama mereka menggunakan sistem.
-       - Pastikan tidak ada tumpang tindih hak akses antar tipe pengguna.
-       - Gunakan istilah yang konsisten untuk nama tipe pengguna di seluruh dokumen.
-       - Setiap tipe pengguna harus memiliki contoh alur kerja utama yang mereka lakukan di sistem.
-       - Sertakan pertimbangan keamanan dan privasi yang relevan untuk setiap tipe pengguna.
-       - Pastikan deskripsi mencakup skenario penggunaan nyata dan konteks bisnis yang jelas.
-       - Gunakan bahasa yang profesional, jelas, dan mudah dipahami oleh tim pengembang dan pemangku kepentingan bisnis.
-       - Setiap tipe pengguna harus memiliki contoh tujuan bisnis yang spesifik dan terukur.
-       - Pastikan setiap deskripsi mencakup interaksi dengan fitur utama sistem dan bagaimana mereka berkontribusi pada tujuan bisnis secara keseluruhan.
-
-    2. EPICS
-       - Susun **4 hingga 6 Epic utama** yang mencakup seluruh arsitektur sistem dari hulu ke hilir (autentikasi, manajemen data, fitur utama sesuai domain bisnis, laporan/analitik, pengaturan sistem, dll).
-       - Pastikan cakupan setiap Epic jelas dan tidak tumpang tindih.
-       - Setiap Epic harus memiliki deskripsi rinci (8-15 kalimat) yang mencakup tujuan bisnis, batasan cakupan, dan alur kerja utama.
-       - Gunakan istilah yang konsisten untuk nama Epic di seluruh dokumen.
-       - Setiap Epic harus mencakup pertimbangan teknis dan non-teknis yang relevan, termasuk integrasi dengan sistem lain jika diperlukan.
-       - Pastikan setiap Epic mencakup skenario penggunaan nyata dan konteks bisnis yang jelas.
-       - Gunakan bahasa yang profesional, jelas, dan mudah dipahami oleh tim pengembang dan pemangku kepentingan bisnis.
-       - Setiap Epic harus memiliki contoh tujuan bisnis yang spesifik dan terukur.
-       - Pastikan setiap deskripsi mencakup interaksi dengan fitur utama sistem dan bagaimana mereka berkontribusi pada tujuan bisnis secara keseluruhan.
-
-    3. USER STORIES
-       3. USER STORIES
-    - Setiap Epic wajib memiliki **2 hingga 3 User Story** yang saling melengkapi.
-    - Setiap User Story harus memiliki deskripsi singkat padat (3-5 kalimat).
-    - Setiap User Story wajib memiliki **3 hingga 5** acceptance criteria spesifik dalam format Given-When-Then.
-    - Setiap User Story wajib memiliki **3 hingga 5** tech notes ringkas untuk developer.
-    - Setiap User Story wajib memiliki **3 hingga 5** test cases untuk pengujian QA.
-
-    4. NON-FUNCTIONAL REQUIREMENTS (NFR)
-       - Wajib mencakup kategori: Performance, Security, Availability, Usability, Scalability, dan Compliance.
-       - Setiap NFR harus dijelaskan secara rinci dengan target kuantitatif yang jelas (misal: response time < 2 detik, uptime 99.9%, enkripsi AES-256, dsb).
-       - Setiap NFR harus memiliki target angka terukur (kuantitatif).
-       - Setiap NFR harus mencakup standar verifikasi yang jelas (misal: metode pengujian, alat ukur, atau prosedur audit).
-       - Pastikan setiap NFR relevan dengan domain bisnis dan tujuan proyek.
-       - Gunakan bahasa yang profesional, jelas, dan mudah dipahami oleh tim pengembang dan pemangku kepentingan bisnis.
-       - Setiap NFR harus mencakup pertimbangan teknis dan non-teknis yang relevan, termasuk integrasi dengan sistem lain jika diperlukan.
-       - Pastikan setiap NFR mencakup skenario penggunaan nyata dan konteks bisnis yang jelas.
-
-    5. FORMAT OUTPUT
-       - Gunakan format JSON yang valid dan sesuai skema yang telah ditentukan. Jangan menambahkan teks pengantar atau penutup di luar struktur JSON.
-       - Pastikan semua field diisi sesuai batas minimal yang ditentukan tanpa diringkas.
-       - Gunakan istilah yang konsisten di seluruh dokumen untuk nama tipe pengguna, Epic, dan User Story.
-       - Pastikan JSON dapat di-parse tanpa error dan sesuai dengan struktur yang telah ditentukan.
-       - Gunakan bahasa yang profesional, jelas, dan mudah dipahami oleh tim pengembang dan pemangku kepentingan bisnis.
-       - Pastikan setiap field diisi sesuai batas minimal yang ditentukan tanpa diringkas.
-       - Pastikan JSON dapat di-parse tanpa error dan sesuai dengan struktur yang telah ditentukan.
+    Buatkan:
+    1. 4-6 User Types / Persona mendalam.
+    2. 6-10 Epics (Modul Utama) yang komprehensif dari hulu ke hilir.
+    3. 6-8 NFRs terukur (Performance, Security, Availability, Usability, Scalability).
+    4. Minimal 1-2 User Story dasar per Epic sebagai acuan awal.
     """
 
     try:
-        response = client.models.generate_content(
+        response = gemini_client.models.generate_content(
             model=GEMINI_MODEL,
-            contents=prompt,
+            contents=prompt_stage1,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=ProjectRequirementsOutput,
                 temperature=0.3,
-                max_output_tokens=16384,  # Memastikan token maksimal agar output mendalam tidak terpotong
+                max_output_tokens=16384,
             )
         )
+        result = json.loads(response.text)
+        return ProjectRequirementsOutput(**result)
 
-        result_json = json.loads(response.text)
-        return ProjectRequirementsOutput(**result_json)
+    except Exception as gemini_err:
+        print(f"⚠️ Gemini fallback ke OpenRouter/Groq: {str(gemini_err)}")
+        # TAHAP FALLBACK jika Gemini limit: Panggil OpenRouter / Groq
+        try:
+            chat_completion = openrouter_client.chat.completions.create(
+                model=OPENROUTER_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a professional system analyst. Output valid JSON matching the schema strictly."},
+                    {"role": "user", "content": prompt_stage1}
+                ],
+                response_format={"type": "json_object"}
+            )
+            raw_text = chat_completion.choices[0].message.content
+            return ProjectRequirementsOutput(**json.loads(raw_text))
+        except Exception as fallback_err:
+            raise RuntimeError(f"Semua provider AI gagal memproses data: {str(fallback_err)}")
 
-    except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
 
-
-def suggest_project_description(project_name: str, platform_type: str) -> str:
-    """Menghasilkan draf deskripsi proyek singkat berdasarkan nama & tipe platform"""
+def generate_detailed_stories_for_epic(epic_name: str, epic_desc: str, project_context: str) -> List[UserStorySuggestion]:
+    """
+    Menghasilkan 4-8 User Story mendalam untuk 1 Epic spesifik menggunakan OpenRouter / Groq.
+    """
     prompt = f"""
-Kamu adalah asisten business analyst berpengalaman.
-Buatkan draf deskripsi proyek software singkat (2-4 kalimat) berdasarkan detail berikut:
+    Proyek: {project_context}
+    Epic: {epic_name} ({epic_desc})
 
-- Nama proyek: {project_name}
-- Tipe platform: {platform_type}
-
-Deskripsi harus menjelaskan tujuan utama aplikasi, target penggunanya, dan gambaran fitur inti secara umum.
-Tulis dalam Bahasa Indonesia, gaya natural dan profesional, tanpa markdown, tanpa tanda kutip di awal/akhir.
-""".strip()
-
+    Hasilkan 4-8 User Story spesifik dan kaya detail untuk Epic ini.
+    Format JSON:
+    [
+      {{
+        "epic_name": "{epic_name}",
+        "story_name": "Judul Story",
+        "user_type": "Peran",
+        "description": "Sebagai [peran], saya ingin [fitur] agar [manfaat]",
+        "acceptance_criteria": ["Given...", "When...", "Then..."],
+        "tech_notes": ["Catatan teknis arsitektur / database / API"],
+        "test_cases": ["Nama skenario test QA"]
+      }}
+    ]
+    """
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
+        # Gunakan Groq untuk pemrosesan detail super cepat
+        res = groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": "Return ONLY a JSON array of stories."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"}
         )
-        description = (response.text or "").strip()
+        data = json.loads(res.choices[0].message.content)
+        stories_list = data if isinstance(data, list) else data.get("stories", [])
+        return [UserStorySuggestion(**s) for s in stories_list]
     except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
-
-    if not description:
-        raise ValueError("AI tidak menghasilkan deskripsi")
-
-    return description
+        print(f"Gagal generate detail story: {e}")
+        return []
