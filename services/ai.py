@@ -135,7 +135,7 @@ def generate_detailed_stories_for_epic(epic_name: str, epic_desc: str, project_c
     Hasilkan 4-8 User Story spesifik dan kaya detail untuk Epic ini.
     Format JSON:
     [
-      {{
+    {{
         "epic_name": "{epic_name}",
         "story_name": "Judul Story",
         "user_type": "Peran",
@@ -143,7 +143,7 @@ def generate_detailed_stories_for_epic(epic_name: str, epic_desc: str, project_c
         "acceptance_criteria": ["Given...", "When...", "Then..."],
         "tech_notes": ["Catatan teknis arsitektur / database / API"],
         "test_cases": ["Nama skenario test QA"]
-      }}
+    }}
     ]
     """
     try:
@@ -162,3 +162,40 @@ def generate_detailed_stories_for_epic(epic_name: str, epic_desc: str, project_c
     except Exception as e:
         print(f"Gagal generate detail story: {e}")
         return []
+
+def suggest_project_description(project_name: str, platform_type: str) -> str:
+    """Menghasilkan draf deskripsi proyek singkat (2-4 kalimat) berdasarkan nama & platform"""
+    prompt = f"""
+    Kamu adalah asisten business analyst berpengalaman.
+    Buatkan draf deskripsi proyek software singkat (2-4 kalimat) berdasarkan detail berikut:
+
+    - Nama proyek: {project_name}
+    - Tipe platform: {platform_type}
+
+    Deskripsi harus menjelaskan tujuan utama aplikasi, target penggunanya, dan gambaran fitur inti secara umum.
+    Tulis dalam Bahasa Indonesia, gaya natural dan profesional, tanpa markdown, tanpa tanda kutip di awal/akhir.
+    """.strip()
+
+    try:
+        # Gunakan Gemini atau Groq untuk menghasilkan saran deskripsi singkat
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
+        description = (response.text or "").strip()
+        if not description:
+            raise ValueError("AI tidak menghasilkan deskripsi")
+        return description
+    except Exception as e:
+        # Fallback ke Groq jika Gemini bermasalah
+        try:
+            res = groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": "Kamu adalah business analyst. Buat deskripsi 2-4 kalimat bahasa Indonesia."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return (res.choices[0].message.content or "").strip()
+        except Exception as groq_err:
+            raise RuntimeError(f"Gagal menghasilkan saran deskripsi: {str(e)} | {str(groq_err)}")
