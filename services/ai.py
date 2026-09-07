@@ -1,9 +1,10 @@
 import os
 import json
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from google import genai
 from google.genai import types
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -138,7 +139,8 @@ class ProjectRequirementsOutput(BaseModel):
     user_stories: List[UserStorySuggestion]
     nfrs: List[NFRSuggestion]
 
-# ================= INISIALISASI GEMINI CLIENT =================
+
+# ================= CLIENT INITIALIZATION =================
 
 api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
@@ -236,9 +238,9 @@ def generate_project_requirements(
     """
 
     try:
-        response = client.models.generate_content(
+        response = gemini_client.models.generate_content(
             model=GEMINI_MODEL,
-            contents=prompt,
+            contents=prompt_stage1,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=ProjectRequirementsOutput,
@@ -279,28 +281,32 @@ def generate_project_requirements(
     except RuntimeError:
         raise
     except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
-
+        print(f"Gagal generate detail story: {e}")
+        return []
 
 def suggest_project_description(project_name: str, platform_type: str) -> str:
-    """Menghasilkan draf deskripsi proyek singkat berdasarkan nama & tipe platform"""
+    """Menghasilkan draf deskripsi proyek singkat (2-4 kalimat) berdasarkan nama & platform"""
     prompt = f"""
-Kamu adalah asisten business analyst berpengalaman.
-Buatkan draf deskripsi proyek software singkat (2-4 kalimat) berdasarkan detail berikut:
+    Kamu adalah asisten business analyst berpengalaman.
+    Buatkan draf deskripsi proyek software singkat (2-4 kalimat) berdasarkan detail berikut:
 
-- Nama proyek: {project_name}
-- Tipe platform: {platform_type}
+    - Nama proyek: {project_name}
+    - Tipe platform: {platform_type}
 
-Deskripsi harus menjelaskan tujuan utama aplikasi, target penggunanya, dan gambaran fitur inti secara umum.
-Tulis dalam Bahasa Indonesia, gaya natural dan profesional, tanpa markdown, tanpa tanda kutip di awal/akhir.
-""".strip()
+    Deskripsi harus menjelaskan tujuan utama aplikasi, target penggunanya, dan gambaran fitur inti secara umum.
+    Tulis dalam Bahasa Indonesia, gaya natural dan profesional, tanpa markdown, tanpa tanda kutip di awal/akhir.
+    """.strip()
 
     try:
-        response = client.models.generate_content(
+        # Gunakan Gemini atau Groq untuk menghasilkan saran deskripsi singkat
+        response = gemini_client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
         )
         description = (response.text or "").strip()
+        if not description:
+            raise ValueError("AI tidak menghasilkan deskripsi")
+        return description
     except Exception as e:
         raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
 
