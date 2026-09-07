@@ -67,6 +67,20 @@ class Project(Base):
     epics = relationship("Epic", back_populates="project", cascade="all, delete-orphan")
     nfrs = relationship("NFR", back_populates="project", cascade="all, delete-orphan")
     user_journeys = relationship("UserJourney", back_populates="project", cascade="all, delete-orphan")
+    
+    # PERBAIKAN DI SINI: Tambahkan cascade="all, delete-orphan" agar tech_stacks ikut terhapus otomatis
+    tech_stack = relationship("TechStack", back_populates="project", uselist=False, cascade="all, delete-orphan")
+    
+    coding_guidelines = relationship("CodingGuideline", back_populates="project", cascade="all, delete-orphan")
+    development_plans = relationship("DevelopmentPlan", back_populates="project", cascade="all, delete-orphan")
+
+    workspace = relationship("Workspace", back_populates="projects")
+    creator = relationship("User", back_populates="projects_created")
+    ai_rules = relationship("AIRule", back_populates="project", cascade="all, delete-orphan")
+    user_types = relationship("UserType", back_populates="project", cascade="all, delete-orphan")
+    epics = relationship("Epic", back_populates="project", cascade="all, delete-orphan")
+    nfrs = relationship("NFR", back_populates="project", cascade="all, delete-orphan")
+    user_journeys = relationship("UserJourney", back_populates="project", cascade="all, delete-orphan")
     tech_stack = relationship("TechStack", back_populates="project", uselist=False)
     coding_guidelines = relationship("CodingGuideline", back_populates="project", cascade="all, delete-orphan")
     development_plans = relationship("DevelopmentPlan", back_populates="project", cascade="all, delete-orphan")

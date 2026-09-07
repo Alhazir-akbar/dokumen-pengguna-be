@@ -7,6 +7,7 @@ import model
 import schemas
 import auth
 from database import get_db
+from services.ai import suggest_tech_stack, suggest_coding_guidelines, suggest_dev_plan
 
 router = APIRouter(prefix="/api/projects", tags=["Build"])
 
@@ -45,7 +46,6 @@ def upsert_tech_stack(
     ).first()
 
     if tech_stack:
-        # Update jika sudah ada
         if data.ui_layer is not None:
             tech_stack.ui_layer = data.ui_layer
         if data.app_layer is not None:
@@ -55,7 +55,6 @@ def upsert_tech_stack(
         if data.integration_layer is not None:
             tech_stack.integration_layer = data.integration_layer
     else:
-        # Buat baru jika belum ada
         tech_stack = model.TechStack(
             project_id=project_id,
             ui_layer=data.ui_layer,
@@ -231,3 +230,71 @@ def delete_dev_plan(
 
     db.delete(plan)
     db.commit()
+
+
+# ============ TAMBAHAN: AUTO-GENERATE SEMUANYA VIA AI ============
+# Dipanggil otomatis begitu wizard project-setup selesai, supaya Build page sudah
+# terisi draf awal (bukan kosong menunggu user isi manual). Best-effort: kalau AI
+# gagal di salah satu bagian, bagian lain tetap dicoba disimpan.
+
+@router.post("/{project_id}/generate-build-defaults", status_code=status.HTTP_201_CREATED)
+def generate_build_defaults(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Generate draf awal Tech Stack, Coding Guidelines, dan Development Plan sekaligus via AI"""
+    project = db.query(model.Project).filter(model.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Proyek tidak ditemukan")
+
+    results = {"tech_stack": False, "guidelines": False, "dev_plan": False, "errors": []}
+
+    # 1. Tech Stack
+    tech_stack_summary = ""
+    try:
+        ts = suggest_tech_stack(project.name, project.description or "", project.application_type or "")
+        existing_ts = db.query(model.TechStack).filter(model.TechStack.project_id == project_id).first()
+        if not existing_ts:
+            db.add(model.TechStack(
+                project_id=project_id,
+                ui_layer=ts.ui_layer,
+                app_layer=ts.app_layer,
+                data_layer=ts.data_layer,
+                integration_layer=ts.integration_layer,
+            ))
+            db.commit()
+        results["tech_stack"] = True
+        tech_stack_summary = f"UI: {ts.ui_layer}, Backend: {ts.app_layer}, Database: {ts.data_layer}, Integration: {ts.integration_layer}"
+    except Exception as e:
+        results["errors"].append(f"tech_stack: {str(e)}")
+
+    # 2. Coding Guidelines (butuh tech stack summary dari langkah 1 kalau berhasil)
+    try:
+        if not tech_stack_summary:
+            tech_stack_summary = f"{project.application_type or 'Web Application'}"
+        gl = suggest_coding_guidelines(project.name, tech_stack_summary)
+        existing_count = db.query(model.CodingGuideline).filter(model.CodingGuideline.project_id == project_id).count()
+        if existing_count == 0:
+            for item in gl.guidelines:
+                db.add(model.CodingGuideline(project_id=project_id, title=item.title, content=item.content))
+            db.commit()
+        results["guidelines"] = True
+    except Exception as e:
+        results["errors"].append(f"guidelines: {str(e)}")
+
+    # 3. Development Plan (satu task per Epic yang sudah ada)
+    try:
+        epics = db.query(model.Epic).filter(model.Epic.project_id == project_id).all()
+        epic_names = [e.name for e in epics]
+        dp = suggest_dev_plan(project.name, epic_names)
+        existing_plan_count = db.query(model.DevelopmentPlan).filter(model.DevelopmentPlan.project_id == project_id).count()
+        if existing_plan_count == 0:
+            for item in dp.items:
+                db.add(model.DevelopmentPlan(project_id=project_id, title=item.title, description=item.description, status="todo"))
+            db.commit()
+        results["dev_plan"] = True
+    except Exception as e:
+        results["errors"].append(f"dev_plan: {str(e)}")
+
+    return results

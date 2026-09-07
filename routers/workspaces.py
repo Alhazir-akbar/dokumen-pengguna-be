@@ -194,3 +194,75 @@ def remove_workspace_member(
     db.commit()
     #
     return {"message": "Anggota berhasil dikeluarkan dari ruang kerja"}
+
+@router.put("/{id}", response_model=schemas.WorkspaceResponse)
+def update_workspace(
+    id: int,
+    workspace_data: schemas.WorkspaceCreate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Mengubah nama workspace (Hanya Owner yang diizinkan)"""
+    membership = db.query(model.WorkspaceMember).filter(
+        model.WorkspaceMember.workspace_id == id,
+        model.WorkspaceMember.user_id == current_user.id
+    ).first()
+
+    if not membership or membership.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hanya Owner ruang kerja yang dapat mengubah nama tim"
+        )
+
+    workspace = db.query(model.Workspace).filter(model.Workspace.id == id).first()
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ruang kerja tidak ditemukan"
+        )
+
+    workspace.name = workspace_data.name
+    db.commit()
+    db.refresh(workspace)
+    return workspace
+
+
+@router.delete("/{id}")
+def delete_workspace(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Menghapus workspace beserta seluruh project dan relasinya secara aman"""
+    membership = db.query(model.WorkspaceMember).filter(
+        model.WorkspaceMember.workspace_id == id,
+        model.WorkspaceMember.user_id == current_user.id
+    ).first()
+
+    if not membership or membership.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hanya Owner ruang kerja yang dapat menghapus tim"
+        )
+
+    workspace = db.query(model.Workspace).filter(model.Workspace.id == id).first()
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ruang kerja tidak ditemukan"
+        )
+
+    # Ambil semua project yang ada di workspace ini lalu hapus secara manual beserta tech_stacks-nya
+    projects = db.query(model.Project).filter(model.Project.workspace_id == id).all()
+    for proj in projects:
+        db.query(model.TechStack).filter(model.TechStack.project_id == proj.id).delete()
+        db.delete(proj)
+
+    # Hapus anggota workspace
+    db.query(model.WorkspaceMember).filter(model.WorkspaceMember.workspace_id == id).delete()
+    
+    # Hapus workspace
+    db.delete(workspace)
+    db.commit()
+    
+    return {"message": "Ruang kerja berhasil dihapus"}

@@ -389,3 +389,77 @@ class SuggestDescriptionRequest(BaseModel):
 
 class SuggestDescriptionResponse(BaseModel):
     description: str
+
+# TAMBAHAN: dipakai endpoint AI Suggest di step UserTypeGoals wizard
+class SuggestUserGoalsRequest(BaseModel):
+    project_name: str
+    user_type_name: str
+    user_type_description: Optional[str] = None
+
+class SuggestUserGoalsResponse(BaseModel):
+    goals: str
+    frustrations: str
+
+# TAMBAHAN: dipakai endpoint AI Suggest di step UserJourney wizard
+class SuggestUserJourneyRequest(BaseModel):
+    project_name: str
+    project_description: Optional[str] = None
+    user_types: List[str] = []
+
+# TAMBAHAN: sebelumnya cuma ada field "journey" (teks naratif). Sekarang disertai
+# "steps" supaya journey yang di-generate AI benar-benar punya langkah-langkah
+# terstruktur, bukan cuma satu paragraf tanpa detail per tahap.
+class SuggestUserJourneyStepItem(BaseModel):
+    title: str
+    description: str
+
+class SuggestUserJourneyResponse(BaseModel):
+    journey: str
+    steps: List[SuggestUserJourneyStepItem] = []
+
+# ================= TAMBAHAN: SKEMA KHUSUS UNTUK SAVE-REQUIREMENTS =================
+# CATATAN PENTING: sebelumnya endpoint /save-requirements memakai ProjectRequirementsOutput
+# (dari services/ai.py) langsung sebagai skema validasi input. Skema itu punya batasan
+# min_length=1 pada personas — batasan itu BENAR untuk memaksa Gemini selalu menghasilkan
+# minimal 1 persona saat generate. TAPI endpoint save-requirements juga menerima user type
+# yang ditambahkan MANUAL oleh user di wizard (tanpa persona sama sekali), sehingga validasi
+# yang sama menolaknya dengan 422. Skema di bawah ini lebih longgar (personas boleh kosong)
+# khusus untuk endpoint save, tanpa mengubah kekakuan skema generate AI.
+
+class SavePersonaItem(BaseModel):
+    name: str
+    age: Optional[int] = None
+    location: Optional[str] = None
+    family_status: Optional[str] = None
+    job_title: Optional[str] = None
+    about: Optional[str] = None
+    goals: Optional[str] = None
+    frustrations: Optional[str] = None
+
+class SaveUserTypeItem(BaseModel):
+    name: str
+    description: Optional[str] = None
+    personas: List[SavePersonaItem] = []
+
+class SaveEpicItem(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class SaveUserStoryItem(BaseModel):
+    epic_name: str
+    story_name: str
+    user_type: str
+    description: Optional[str] = None
+    acceptance_criteria: List[str] = []
+    tech_notes: List[str] = []
+    test_cases: List[str] = []
+
+class SaveNFRItem(BaseModel):
+    category: str
+    description: str
+
+class SaveRequirementsPayload(BaseModel):
+    user_types: List[SaveUserTypeItem] = []
+    epics: List[SaveEpicItem] = []
+    user_stories: List[SaveUserStoryItem] = []
+    nfrs: List[SaveNFRItem] = []
