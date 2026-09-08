@@ -1,13 +1,19 @@
 import os
+import re
 import json
+import threading
+import itertools
+from typing import List, Optional, Type, TypeVar
+
 from pydantic import BaseModel, Field
-from typing import List, Optional
 from google import genai
 from google.genai import types
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
+
+T = TypeVar("T", bound=BaseModel)
 
 # ================= SKEMA OUTPUT TERSTRUKTUR UNTUK AI =================
 
@@ -140,184 +146,6 @@ class ProjectRequirementsOutput(BaseModel):
     nfrs: List[NFRSuggestion]
 
 
-# ================= CLIENT INITIALIZATION =================
-
-api_key = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
-
-# CATATAN: model varian "flash" dioptimalkan untuk kecepatan & ringkas. Untuk requirement
-# dokumen yang butuh detail & reasoning lebih dalam, pertimbangkan model non-flash (varian
-# "pro") jika tersedia di akun Anda dan kecepatan generate bukan prioritas utama.
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-
-
-def generate_project_requirements(
-    project_name: str,
-    project_description: str,
-    application_type: str,
-    domain_business: str,
-    target_users: str,
-    business_goals: str,
-    ai_rules: List[str]
-) -> ProjectRequirementsOutput:
-    """
-    Memanggil Gemini API untuk menghasilkan draf dokumentasi kebutuhan software yang
-    detail dan siap dipakai developer — mencakup user types, epics, user stories
-    (dengan acceptance criteria, tech notes, dan test cases), serta NFR.
-    """
-    if ai_rules:
-        rules_prompt = "\n".join([f"- {rule}" for rule in ai_rules])
-    else:
-        rules_prompt = "- Tidak ada aturan khusus. Tulis dengan standar profesional umum."
-
-    prompt = f"""
-    Anda adalah seorang Senior Business Analyst dan System Analyst dengan pengalaman lebih dari
-    10 tahun menulis dokumentasi kebutuhan software untuk tim engineering profesional. Dokumen
-    yang Anda hasilkan akan LANGSUNG dipakai developer untuk membangun sistem tanpa sesi
-    klarifikasi tambahan dengan stakeholder — jadi setiap requirement HARUS cukup jelas, spesifik,
-    dan lengkap sehingga tidak ada ruang untuk salah tafsir. Requirement yang terlalu singkat atau
-    generik akan menyebabkan developer salah membangun fitur, itu adalah kegagalan dokumen ini.
-
-    DETAIL PROYEK:
-    Nama Proyek: {project_name}
-    Deskripsi: {project_description}
-    Tipe Aplikasi: {application_type}
-    Domain Bisnis: {domain_business}
-    Target Pengguna: {target_users}
-    Tujuan Bisnis: {business_goals}
-
-    ATURAN KHUSUS AI (WAJIB DIPATUHI):
-    {rules_prompt}
-
-    INSTRUKSI PENYUSUNAN (WAJIB DIIKUTI SECARA KETAT, JANGAN DIRINGKAS):
-
-    1. USER TYPES
-       - Identifikasi seluruh tipe pengguna relevan berdasarkan target pengguna dan domain bisnis.
-       - Deskripsi tiap tipe CUKUP SINGKAT (maksimal 3 kalimat) — cukup identitas, peran, dan tingkat
-         akses. JANGAN dibuat panjang; kedalaman requirement difokuskan ke Epic dan User Story di
-         bawah, bukan di sini.
-       - Setiap User Type WAJIB disertai TEPAT 1 contoh persona fiktif yang konkret (nama, usia,
-         lokasi, pekerjaan, latar belakang singkat, goals, frustrations) — lihat skema PersonaSuggestion.
-
-    2. EPICS
-       - Susun 3-5 Epic (tidak perlu lebih) yang mencakup fungsi utama aplikasi, termasuk minimal:
-         autentikasi/manajemen akun dan fitur inti sesuai domain bisnis.
-       - Setiap Epic harus DETAIL dan KONKRET (lihat definisi field description pada skema): sebutkan
-         fitur/layar spesifik yang termasuk di dalamnya, bukan cuma nama kategori umum. Epic yang
-         kabur/generik akan membuat developer salah estimasi cakupan kerja.
-       - Setiap Epic harus punya cakupan yang jelas dan tidak tumpang tindih dengan Epic lain.
-
-    3. USER STORIES
-       - Setiap Epic memiliki 2-3 User Story PALING PENTING/PALING INTI saja (bukan mencoba
-         mencakup semua kemungkinan aksi) — kualitas dan kedalaman tiap story jauh lebih penting
-         daripada kuantitas. Lebih baik sedikit story yang sangat detail daripada banyak story
-         yang dangkal.
-       - User Story adalah bagian PALING PENTING dari dokumen ini — inilah yang langsung dipakai
-         developer untuk membangun fitur. WAJIB memenuhi seluruh sub-field berikut secara lengkap
-         dan detail (lihat definisi masing-masing field pada skema): description (naratif lengkap
-         dengan main flow dan edge case), acceptance_criteria (format Given-When-Then, terukur),
-         tech_notes (pertimbangan implementasi teknis konkret), dan test_cases (skenario uji QA
-         konkret, berbeda isinya dari acceptance_criteria).
-       - Terhubung ke Epic dan User Type yang sesuai (nama harus persis sama dengan yang
-         didefinisikan di atas, huruf besar/kecil dan ejaan harus identik).
-
-    4. NON-FUNCTIONAL REQUIREMENTS (NFR)
-       - Wajib mencakup minimal kategori: Performance, Security, Availability, Usability, Scalability.
-       - Setiap NFR harus punya target kuantitatif/terukur, bukan pernyataan kualitatif yang samar.
-
-    5. KUALITAS & KEDALAMAN
-       - Gunakan Bahasa Indonesia yang jelas dan profesional.
-       - JANGAN membuat requirement singkat/generik hanya demi menghemat panjang output. Kedalaman
-         dan kejelasan lebih penting daripada keringkasan. Bayangkan seorang developer junior yang
-         belum pernah bicara dengan stakeholder harus bisa membangun fitur dengan benar HANYA dari
-         membaca dokumen ini, tanpa bertanya lagi.
-       - Pastikan konsistensi penamaan (epic_name, user_type) di seluruh story agar validasi data
-         tidak gagal.
-
-    Hasilkan output sesuai skema JSON yang telah ditentukan.
-    """
-
-    try:
-        response = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt_stage1,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=ProjectRequirementsOutput,
-                temperature=0.3,
-                # Dinaikkan signifikan dari 8192 -> 32768. Dengan instruksi detail (4-6 epic x
-                # 3-5 story x deskripsi panjang + acceptance_criteria + tech_notes + test_cases),
-                # total output bisa jauh melebihi 8192 token, menyebabkan respons terpotong di
-                # tengah JSON ("Unterminated string...") sehingga gagal di-parse.
-                max_output_tokens=32768,
-            )
-        )
-
-        # Deteksi eksplisit kalau respons terpotong karena kehabisan token, supaya pesan
-        # error yang muncul jelas menyebutkan akar masalahnya (bukan cuma error parsing JSON
-        # yang membingungkan).
-        finish_reason = None
-        try:
-            finish_reason = response.candidates[0].finish_reason
-        except Exception:
-            pass
-
-        if finish_reason is not None and str(finish_reason).upper().find("MAX_TOKENS") != -1:
-            raise RuntimeError(
-                "Respons AI terpotong karena melebihi batas token maksimum. Coba lagi, atau "
-                "kurangi jumlah AI Rules/kompleksitas deskripsi proyek untuk mengurangi ukuran output."
-            )
-
-        try:
-            result_json = json.loads(response.text)
-        except json.JSONDecodeError as e:
-            raise RuntimeError(
-                f"Respons AI tidak lengkap/terpotong sehingga gagal diproses (kemungkinan "
-                f"melebihi batas panjang output). Silakan coba generate ulang. Detail teknis: {e}"
-            )
-
-        return ProjectRequirementsOutput(**result_json)
-
-    except RuntimeError:
-        raise
-    except Exception as e:
-        print(f"Gagal generate detail story: {e}")
-        return []
-
-def suggest_project_description(project_name: str, platform_type: str) -> str:
-    """Menghasilkan draf deskripsi proyek singkat (2-4 kalimat) berdasarkan nama & platform"""
-    prompt = f"""
-    Kamu adalah asisten business analyst berpengalaman.
-    Buatkan draf deskripsi proyek software singkat (2-4 kalimat) berdasarkan detail berikut:
-
-    - Nama proyek: {project_name}
-    - Tipe platform: {platform_type}
-
-    Deskripsi harus menjelaskan tujuan utama aplikasi, target penggunanya, dan gambaran fitur inti secara umum.
-    Tulis dalam Bahasa Indonesia, gaya natural dan profesional, tanpa markdown, tanpa tanda kutip di awal/akhir.
-    """.strip()
-
-    try:
-        # Gunakan Gemini atau Groq untuk menghasilkan saran deskripsi singkat
-        response = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-        )
-        description = (response.text or "").strip()
-        if not description:
-            raise ValueError("AI tidak menghasilkan deskripsi")
-        return description
-    except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
-
-    if not description:
-        raise ValueError("AI tidak menghasilkan deskripsi")
-
-    return description
-
-
-# ================= TAMBAHAN: SARAN GOALS & FRUSTRATIONS PER USER TYPE =================
-
 class UserGoalsSuggestion(BaseModel):
     goals: str = Field(
         description=(
@@ -334,47 +162,6 @@ class UserGoalsSuggestion(BaseModel):
         )
     )
 
-
-def suggest_user_goals(project_name: str, user_type_name: str, user_type_description: str) -> UserGoalsSuggestion:
-    """Menghasilkan saran goals & frustrations untuk satu tipe pengguna, dipakai di step UserTypeGoals wizard"""
-    context_line = (
-        f"Deskripsi tipe pengguna ini: {user_type_description}"
-        if user_type_description
-        else "Tidak ada deskripsi tambahan untuk tipe pengguna ini."
-    )
-
-    prompt = f"""
-Kamu adalah UX researcher berpengalaman yang membantu menyusun user persona untuk sebuah proyek software.
-
-Nama Proyek: {project_name}
-Tipe Pengguna: {user_type_name}
-{context_line}
-
-Tugasmu: tuliskan (1) goals — apa yang ingin dicapai tipe pengguna ini saat memakai aplikasi
-"{project_name}", dan (2) frustrations — hal-hal yang membuat mereka frustrasi jika aplikasi
-ini tidak memenuhi kebutuhan mereka. Keduanya harus spesifik terhadap peran "{user_type_name}"
-dan konteks proyek ini, bukan kalimat generik yang bisa dipakai untuk aplikasi apa saja.
-
-Tulis dalam Bahasa Indonesia, gaya natural dan profesional.
-""".strip()
-
-    try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=UserGoalsSuggestion,
-                temperature=0.4,
-            )
-        )
-        result_json = json.loads(response.text)
-        return UserGoalsSuggestion(**result_json)
-    except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
-
-
-# ================= TAMBAHAN: SARAN USER JOURNEY (NARASI + STEPS TERSTRUKTUR) =================
 
 class UserJourneyStepSuggestion(BaseModel):
     title: str = Field(description="Judul singkat tahapan ini (misal: 'Membuka Halaman Utama', 'Mengisi Formulir Pendaftaran')")
@@ -405,6 +192,402 @@ class UserJourneySuggestion(BaseModel):
     )
 
 
+class TechStackSuggestion(BaseModel):
+    ui_layer: str = Field(description="Framework/teknologi UI yang paling cocok (contoh: 'Next.js (React)')")
+    app_layer: str = Field(description="Framework/teknologi backend yang paling cocok (contoh: 'FastAPI (Python)')")
+    data_layer: str = Field(description="Database yang paling cocok (contoh: 'PostgreSQL')")
+    integration_layer: str = Field(description="Protokol/pola integrasi yang paling cocok (contoh: 'REST API')")
+
+
+class GuidelineSuggestion(BaseModel):
+    title: str = Field(description="Judul singkat guideline (contoh: 'Struktur Folder & Penamaan File')")
+    content: str = Field(
+        description=(
+            "Isi guideline 3-5 kalimat yang actionable dan spesifik terhadap tech stack proyek "
+            "ini -- bukan saran generik yang berlaku untuk semua bahasa pemrograman."
+        )
+    )
+
+
+class CodingGuidelinesSuggestion(BaseModel):
+    guidelines: List[GuidelineSuggestion] = Field(
+        description="3-5 coding guideline paling penting untuk proyek ini, spesifik terhadap tech stack yang dipakai."
+    )
+
+
+class DevPlanItemSuggestion(BaseModel):
+    title: str = Field(description="Judul task pengembangan (contoh: 'Implementasi Autentikasi & Registrasi')")
+    description: str = Field(description="Deskripsi singkat 1-2 kalimat cakupan task ini")
+
+
+class DevPlanSuggestion(BaseModel):
+    items: List[DevPlanItemSuggestion] = Field(
+        description="Daftar task pengembangan awal, satu task per Epic yang diberikan, dengan urutan prioritas logis (fondasi/autentikasi duluan)."
+    )
+
+
+# ================= KONFIGURASI 3 PROVIDER AI =================
+# Tiga provider dipakai bergiliran (round-robin) untuk generate, supaya beban tidak
+# numpuk di satu API key/model saja dan lebih tahan terhadap rate limit.
+#
+# 1. Gemini        -> pakai SDK resmi google-genai, support response_schema native.
+# 2. OpenRouter     -> OpenAI-compatible, dipanggil lewat SDK `openai` dengan base_url custom.
+# 3. Groq Cloud     -> OpenAI-compatible juga, sama caranya dengan OpenRouter.
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL_NAME", "meta-llama/llama-3.3-70b-instruct:free")
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+
+# Client dibuat sekali di level modul. Kalau salah satu API key tidak diset,
+# client-nya jadi None dan provider itu otomatis dilewati saat giliran (bukan crash).
+gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+openrouter_client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL) if OPENROUTER_API_KEY else None
+groq_client = OpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL) if GROQ_API_KEY else None
+
+_PROVIDER_NAMES = ["gemini", "openrouter", "groq"]
+_provider_cycle = itertools.cycle(_PROVIDER_NAMES)
+_cycle_lock = threading.Lock()
+
+
+def _next_provider_order() -> List[str]:
+    """
+    Ambil urutan provider yang akan dicoba untuk satu kali panggilan generate.
+    Provider "giliran" (hasil round-robin) dicoba duluan, lalu 2 provider lain
+    dipakai sebagai fallback berurutan kalau yang giliran gagal/limit/error.
+    Dengan lock supaya aman kalau ada beberapa request generate bersamaan.
+    """
+    with _cycle_lock:
+        start = next(_provider_cycle)
+    idx = _PROVIDER_NAMES.index(start)
+    return _PROVIDER_NAMES[idx:] + _PROVIDER_NAMES[:idx]
+
+
+def _strip_json_fence(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
+
+
+def _extract_json_object(text: str) -> str:
+    """Bersihkan output model non-Gemini yang kadang membungkus JSON dengan
+    code fence atau menambahkan kalimat pembuka/penutup di luar JSON."""
+    candidate = _strip_json_fence(text)
+    try:
+        json.loads(candidate)
+        return candidate
+    except json.JSONDecodeError:
+        pass
+
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return candidate[start:end + 1]
+    return candidate
+
+
+def _call_gemini(prompt: str, schema: Type[T], temperature: float, max_output_tokens: Optional[int] = None) -> T:
+    if gemini_client is None:
+        raise RuntimeError("GEMINI_API_KEY tidak diset di .env")
+
+    config_kwargs = dict(
+        response_mime_type="application/json",
+        response_schema=schema,
+        temperature=temperature,
+    )
+    if max_output_tokens:
+        config_kwargs["max_output_tokens"] = max_output_tokens
+
+    response = gemini_client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(**config_kwargs),
+    )
+
+    finish_reason = None
+    try:
+        finish_reason = response.candidates[0].finish_reason
+    except Exception:
+        pass
+    if finish_reason is not None and str(finish_reason).upper().find("MAX_TOKENS") != -1:
+        raise RuntimeError("Respons Gemini terpotong karena melebihi batas token maksimum.")
+
+    result_json = json.loads(response.text)
+    return schema(**result_json)
+
+
+def _call_openai_compatible(
+    client: Optional[OpenAI],
+    model: str,
+    prompt: str,
+    schema: Type[T],
+    temperature: float,
+    max_tokens: Optional[int] = None,
+) -> T:
+    if client is None:
+        raise RuntimeError(f"API key untuk model '{model}' tidak diset di .env")
+
+    schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
+    system_msg = (
+        "Kamu adalah asisten yang WAJIB membalas HANYA dengan satu objek JSON valid yang "
+        "sesuai skema berikut, tanpa teks pembuka, tanpa penjelasan, tanpa markdown code fence:\n\n"
+        f"{schema_json}"
+    )
+
+    create_kwargs = dict(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=temperature,
+    )
+    if max_tokens:
+        create_kwargs["max_tokens"] = max_tokens
+
+    try:
+        response = client.chat.completions.create(response_format={"type": "json_object"}, **create_kwargs)
+    except Exception:
+        # Sebagian model/provider (terutama model gratis) belum tentu mendukung
+        # response_format json_object -> fallback ke request biasa, tetap mengandalkan
+        # instruksi di system prompt supaya outputnya JSON.
+        response = client.chat.completions.create(**create_kwargs)
+
+    choice = response.choices[0]
+    if getattr(choice, "finish_reason", None) == "length":
+        raise RuntimeError(f"Respons dari model '{model}' terpotong karena melebihi batas token maksimum.")
+
+    raw_text = choice.message.content or ""
+    candidate = _extract_json_object(raw_text)
+    result_json = json.loads(candidate)
+    return schema(**result_json)
+
+
+def _generate_structured(prompt: str, schema: Type[T], temperature: float = 0.3, max_tokens: Optional[int] = None) -> T:
+    """
+    Dispatcher utama untuk semua generate yang butuh output terstruktur (JSON -> Pydantic).
+    Urutan provider mengikuti round-robin (_next_provider_order), dengan fallback otomatis
+    ke provider berikutnya kalau salah satu gagal (limit, error jaringan, output terpotong,
+    atau JSON tidak valid).
+    """
+    errors: List[str] = []
+    for provider in _next_provider_order():
+        try:
+            if provider == "gemini":
+                return _call_gemini(prompt, schema, temperature, max_output_tokens=max_tokens)
+            elif provider == "openrouter":
+                return _call_openai_compatible(
+                    openrouter_client, OPENROUTER_MODEL, prompt, schema, temperature, max_tokens=max_tokens
+                )
+            elif provider == "groq":
+                return _call_openai_compatible(
+                    groq_client, GROQ_MODEL, prompt, schema, temperature, max_tokens=max_tokens
+                )
+        except Exception as e:
+            errors.append(f"[{provider}] {e}")
+            continue
+
+    raise RuntimeError(
+        "Semua provider AI (Gemini, OpenRouter, Groq) gagal merespons secara bergiliran. "
+        "Detail per provider: " + " || ".join(errors)
+    )
+
+
+def _generate_text(prompt: str, temperature: float = 0.5) -> str:
+    """Dispatcher untuk generate teks bebas (non-JSON), dengan round-robin + fallback yang sama."""
+    errors: List[str] = []
+    for provider in _next_provider_order():
+        try:
+            if provider == "gemini":
+                if gemini_client is None:
+                    raise RuntimeError("GEMINI_API_KEY tidak diset di .env")
+                response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+                text = (response.text or "").strip()
+            else:
+                client = openrouter_client if provider == "openrouter" else groq_client
+                model = OPENROUTER_MODEL if provider == "openrouter" else GROQ_MODEL
+                if client is None:
+                    raise RuntimeError(f"API key untuk provider '{provider}' tidak diset di .env")
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
+                )
+                text = (response.choices[0].message.content or "").strip()
+
+            if not text:
+                raise RuntimeError(f"Respons kosong dari provider '{provider}'")
+            return text
+        except Exception as e:
+            errors.append(f"[{provider}] {e}")
+            continue
+
+    raise RuntimeError(
+        "Semua provider AI (Gemini, OpenRouter, Groq) gagal merespons secara bergiliran. "
+        "Detail per provider: " + " || ".join(errors)
+    )
+
+
+# ================= FUNGSI-FUNGSI GENERATE (PUBLIC API - TIDAK BERUBAH SIGNATURE-NYA) =================
+
+def generate_project_requirements(
+    project_name: str,
+    project_description: str,
+    application_type: str,
+    domain_business: str,
+    target_users: str,
+    business_goals: str,
+    ai_rules: List[str]
+) -> ProjectRequirementsOutput:
+    """
+    Menghasilkan draf dokumentasi kebutuhan software yang detail dan siap dipakai
+    developer — mencakup user types, epics, user stories (dengan acceptance criteria,
+    tech notes, dan test cases), serta NFR. Provider dipilih bergiliran (round-robin)
+    dengan fallback otomatis kalau salah satu provider gagal/limit/output terpotong.
+    """
+    if ai_rules:
+        rules_prompt = "\n".join([f"- {rule}" for rule in ai_rules])
+    else:
+        rules_prompt = "- Tidak ada aturan khusus. Tulis dengan standar profesional umum."
+
+    prompt = f"""
+    Anda adalah seorang Senior Business Analyst dan System Analyst dengan pengalaman lebih dari
+    10 tahun menulis dokumentasi kebutuhan software untuk tim engineering profesional. Dokumen
+    yang Anda hasilkan akan LANGSUNG dipakai developer untuk membangun sistem tanpa sesi
+    klarifikasi tambahan dengan stakeholder — jadi setiap requirement HARUS cukup jelas, spesifik,
+    dan lengkap sehingga tidak ada ruang untuk salah tafsir. Requirement yang terlalu singkat atau
+    generik akan menyebabkan developer salah membangun fitur, itu adalah kegagalan dokumen ini.
+
+    DETAIL PROYEK:
+    Nama Proyek: {project_name}
+    Deskripsi: {project_description}
+    Tipe Aplikasi: {application_type}
+    Domain Bisnis: {domain_business}
+    Target Pengguna: {target_users}
+    Tujuan Bisnis: {business_goals}
+
+    ATURAN KHUSUS AI (WAJIB DIPATUHI):
+    {rules_prompt}
+
+    INSTRUKSI PENYUSUNAN (WAJIB DIIKUTI SECARA KETAT, JANGAN DIRINGKAS):
+
+    1. USER TYPES
+        - Identifikasi seluruh tipe pengguna relevan berdasarkan target pengguna dan domain bisnis.
+        - Deskripsi tiap tipe CUKUP SINGKAT (maksimal 3 kalimat) — cukup identitas, peran, dan tingkat
+          akses. JANGAN dibuat panjang; kedalaman requirement difokuskan ke Epic dan User Story di
+          bawah, bukan di sini.
+        - Setiap User Type WAJIB disertai TEPAT 1 contoh persona fiktif yang konkret (nama, usia,
+          lokasi, pekerjaan, latar belakang singkat, goals, frustrations) — lihat skema PersonaSuggestion.
+
+    2. EPICS
+        - Susun 3-5 Epic (tidak perlu lebih) yang mencakup fungsi utama aplikasi, termasuk minimal:
+          autentikasi/manajemen akun dan fitur inti sesuai domain bisnis.
+        - Setiap Epic harus DETAIL dan KONKRET (lihat definisi field description pada skema): sebutkan
+          fitur/layar spesifik yang termasuk di dalamnya, bukan cuma nama kategori umum. Epic yang
+          kabur/generik akan membuat developer salah estimasi cakupan kerja.
+        - Setiap Epic harus punya cakupan yang jelas dan tidak tumpang tindih dengan Epic lain.
+
+    3. USER STORIES
+        - Setiap Epic memiliki 2-3 User Story PALING PENTING/PALING INTI saja (bukan mencoba
+          mencakup semua kemungkinan aksi) — kualitas dan kedalaman tiap story jauh lebih penting
+          daripada kuantitas. Lebih baik sedikit story yang sangat detail daripada banyak story
+          yang dangkal.
+        - User Story adalah bagian PALING PENTING dari dokumen ini — inilah yang langsung dipakai
+          developer untuk membangun fitur. WAJIB memenuhi seluruh sub-field berikut secara lengkap
+          dan detail (lihat definisi masing-masing field pada skema): description (naratif lengkap
+          dengan main flow dan edge case), acceptance_criteria (format Given-When-Then, terukur),
+          tech_notes (pertimbangan implementasi teknis konkret), dan test_cases (skenario uji QA
+          konkret, berbeda isinya dari acceptance_criteria).
+        - Terhubung ke Epic dan User Type yang sesuai (nama harus persis sama dengan yang
+          didefinisikan di atas, huruf besar/kecil dan ejaan harus identik).
+
+    4. NON-FUNCTIONAL REQUIREMENTS (NFR)
+        - Wajib mencakup minimal kategori: Performance, Security, Availability, Usability, Scalability.
+        - Setiap NFR harus punya target kuantitatif/terukur, bukan pernyataan kualitatif yang samar.
+
+    5. KUALITAS & KEDALAMAN
+        - Gunakan Bahasa Indonesia yang jelas dan profesional.
+        - JANGAN membuat requirement singkat/generik hanya demi menghemat panjang output. Kedalaman
+          dan kejelasan lebih penting daripada keringkasan. Bayangkan seorang developer junior yang
+          belum pernah bicara dengan stakeholder harus bisa membangun fitur dengan benar HANYA dari
+          membaca dokumen ini, tanpa bertanya lagi.
+        - Pastikan konsistensi penamaan (epic_name, user_type) di seluruh story agar validasi data
+          tidak gagal.
+
+    Hasilkan output sesuai skema JSON yang telah ditentukan.
+    """
+
+    try:
+        # max_tokens digenerelisir ke seluruh provider (bukan cuma Gemini) karena
+        # output requirement ini memang berat -- kalau provider yang lagi giliran
+        # tidak sanggup (output kepotong / limit), dispatcher akan otomatis coba
+        # provider berikutnya.
+        return _generate_structured(prompt, ProjectRequirementsOutput, temperature=0.3, max_tokens=32768)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate project requirements: {str(e)}") from e
+
+
+def suggest_project_description(project_name: str, platform_type: str) -> str:
+    """Menghasilkan draf deskripsi proyek singkat (2-4 kalimat) berdasarkan nama & platform"""
+    prompt = f"""
+    Kamu adalah asisten business analyst berpengalaman.
+    Buatkan draf deskripsi proyek software singkat (2-4 kalimat) berdasarkan detail berikut:
+
+    - Nama proyek: {project_name}
+    - Tipe platform: {platform_type}
+
+    Deskripsi harus menjelaskan tujuan utama aplikasi, target penggunanya, dan gambaran fitur inti secara umum.
+    Tulis dalam Bahasa Indonesia, gaya natural dan profesional, tanpa markdown, tanpa tanda kutip di awal/akhir.
+    """.strip()
+
+    try:
+        description = _generate_text(prompt, temperature=0.6)
+    except Exception as e:
+        raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
+
+    if not description:
+        raise ValueError("AI tidak menghasilkan deskripsi")
+
+    return description
+
+
+def suggest_user_goals(project_name: str, user_type_name: str, user_type_description: str) -> UserGoalsSuggestion:
+    """Menghasilkan saran goals & frustrations untuk satu tipe pengguna, dipakai di step UserTypeGoals wizard"""
+    context_line = (
+        f"Deskripsi tipe pengguna ini: {user_type_description}"
+        if user_type_description
+        else "Tidak ada deskripsi tambahan untuk tipe pengguna ini."
+    )
+
+    prompt = f"""
+Kamu adalah UX researcher berpengalaman yang membantu menyusun user persona untuk sebuah proyek software.
+
+Nama Proyek: {project_name}
+Tipe Pengguna: {user_type_name}
+{context_line}
+
+Tugasmu: tuliskan (1) goals — apa yang ingin dicapai tipe pengguna ini saat memakai aplikasi
+"{project_name}", dan (2) frustrations — hal-hal yang membuat mereka frustrasi jika aplikasi
+ini tidak memenuhi kebutuhan mereka. Keduanya harus spesifik terhadap peran "{user_type_name}"
+dan konteks proyek ini, bukan kalimat generik yang bisa dipakai untuk aplikasi apa saja.
+
+Tulis dalam Bahasa Indonesia, gaya natural dan profesional.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, UserGoalsSuggestion, temperature=0.4)
+    except Exception as e:
+        raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
+
+
 def suggest_user_journey(project_name: str, project_description: str, user_types: List[str]) -> UserJourneySuggestion:
     """Menghasilkan draf narasi DAN langkah-langkah user journey terstruktur dari awal sampai akhir secara detail tanpa nama fiktif."""
     user_types_line = (
@@ -431,31 +614,9 @@ Tulis dalam Bahasa Indonesia, gaya natural dan profesional.
 """.strip()
 
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=UserJourneySuggestion,
-                temperature=0.4,
-            )
-        )
-        result_json = json.loads(response.text)
-        return UserJourneySuggestion(**result_json)
+        return _generate_structured(prompt, UserJourneySuggestion, temperature=0.4)
     except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
-
-
-# ================= TAMBAHAN: AUTO-GENERATE BUILD DEFAULTS =================
-# Dipanggil otomatis begitu wizard selesai, supaya halaman Build (Tech Stack,
-# Coding Guidelines, Development Plans) sudah terisi draf awal dari AI -- bukan
-# kosong menunggu user mengisi manual satu per satu.
-
-class TechStackSuggestion(BaseModel):
-    ui_layer: str = Field(description="Framework/teknologi UI yang paling cocok (contoh: 'Next.js (React)')")
-    app_layer: str = Field(description="Framework/teknologi backend yang paling cocok (contoh: 'FastAPI (Python)')")
-    data_layer: str = Field(description="Database yang paling cocok (contoh: 'PostgreSQL')")
-    integration_layer: str = Field(description="Protokol/pola integrasi yang paling cocok (contoh: 'REST API')")
+        raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
 
 
 def suggest_tech_stack(project_name: str, project_description: str, application_type: str) -> TechStackSuggestion:
@@ -475,35 +636,9 @@ Tulis dalam Bahasa Indonesia untuk penjelasan jika ada, tapi nama teknologi teta
 """.strip()
 
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=TechStackSuggestion,
-                temperature=0.3,
-            )
-        )
-        result_json = json.loads(response.text)
-        return TechStackSuggestion(**result_json)
+        return _generate_structured(prompt, TechStackSuggestion, temperature=0.3)
     except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
-
-
-class GuidelineSuggestion(BaseModel):
-    title: str = Field(description="Judul singkat guideline (contoh: 'Struktur Folder & Penamaan File')")
-    content: str = Field(
-        description=(
-            "Isi guideline 3-5 kalimat yang actionable dan spesifik terhadap tech stack proyek "
-            "ini -- bukan saran generik yang berlaku untuk semua bahasa pemrograman."
-        )
-    )
-
-
-class CodingGuidelinesSuggestion(BaseModel):
-    guidelines: List[GuidelineSuggestion] = Field(
-        description="3-5 coding guideline paling penting untuk proyek ini, spesifik terhadap tech stack yang dipakai."
-    )
+        raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
 
 
 def suggest_coding_guidelines(project_name: str, tech_stack_summary: str) -> CodingGuidelinesSuggestion:
@@ -522,30 +657,9 @@ Tulis dalam Bahasa Indonesia.
 """.strip()
 
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=CodingGuidelinesSuggestion,
-                temperature=0.3,
-            )
-        )
-        result_json = json.loads(response.text)
-        return CodingGuidelinesSuggestion(**result_json)
+        return _generate_structured(prompt, CodingGuidelinesSuggestion, temperature=0.3)
     except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
-
-
-class DevPlanItemSuggestion(BaseModel):
-    title: str = Field(description="Judul task pengembangan (contoh: 'Implementasi Autentikasi & Registrasi')")
-    description: str = Field(description="Deskripsi singkat 1-2 kalimat cakupan task ini")
-
-
-class DevPlanSuggestion(BaseModel):
-    items: List[DevPlanItemSuggestion] = Field(
-        description="Daftar task pengembangan awal, satu task per Epic yang diberikan, dengan urutan prioritas logis (fondasi/autentikasi duluan)."
-    )
+        raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
 
 
 def suggest_dev_plan(project_name: str, epic_names: List[str]) -> DevPlanSuggestion:
@@ -567,16 +681,6 @@ Tulis dalam Bahasa Indonesia.
 """.strip()
 
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=DevPlanSuggestion,
-                temperature=0.3,
-            )
-        )
-        result_json = json.loads(response.text)
-        return DevPlanSuggestion(**result_json)
+        return _generate_structured(prompt, DevPlanSuggestion, temperature=0.3)
     except Exception as e:
-        raise RuntimeError(f"Gagal memanggil Gemini API: {str(e)}")
+        raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
