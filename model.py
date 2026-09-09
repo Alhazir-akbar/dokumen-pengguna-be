@@ -247,3 +247,24 @@ class DevelopmentPlan(Base):
 
     # Relasi
     project = relationship("Project", back_populates="development_plans")
+
+    # ===== TOKEN USAGE TRACKING =====
+
+class AiTokenUsage(Base):
+    __tablename__ = "ai_token_usages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    provider = Column(String, nullable=False)        # gemini | openrouter | groq
+    model_name = Column(String, nullable=False)      # gemini-2.0-flash | dll
+    feature = Column(String, nullable=False)         # requirements_generation | user_journey | dll
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User")
+    workspace = relationship("Workspace")
+    project = relationship("Project")
