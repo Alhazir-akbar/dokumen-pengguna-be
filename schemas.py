@@ -255,6 +255,14 @@ class NFRResponse(BaseModel):
 
 # ================= JOURNEYS =================
 
+# ================= JOURNEYS =================
+
+class JourneyStepBulkItem(BaseModel):
+    title: str
+    description: Optional[str] = None
+    step_order: int
+    persona_id: Optional[int] = None
+
 class JourneyStepCreate(BaseModel):
     user_journey_id: int
     persona_id: Optional[int] = None
@@ -266,6 +274,7 @@ class JourneyStepResponse(BaseModel):
     id: int
     user_journey_id: int
     persona_id: Optional[int] = None
+    persona: Optional[PersonaResponse] = None
     step_order: int
     title: str
     description: Optional[str] = None
@@ -277,16 +286,11 @@ class UserJourneyCreate(BaseModel):
     name: str
     description: Optional[str] = None
     project_id: int
+    steps: List[JourneyStepBulkItem] = []   # <- sekarang aman, JourneyStepBulkItem udah didefinisikan di atas
 
 class UserJourneyUpdate(BaseModel):
     name: str
     description: Optional[str] = None
-
-class JourneyStepBulkItem(BaseModel):
-    title: str
-    description: Optional[str] = None
-    step_order: int
-    persona_id: Optional[int] = None
 
 class JourneyStepsBulkUpdate(BaseModel):
     steps: List[JourneyStepBulkItem] = []
@@ -302,22 +306,30 @@ class UserJourneyResponse(BaseModel):
         from_attributes = True
 
 # ================= BUILD MODULE (FR007) =================
-# CATATAN PERBAIKAN: sebelumnya TechStackUpdate/TechStackResponse memakai nama field
-# frontend/backend/database/infrastructure, padahal model.py (tabel TechStack) dan
-# routers/build.py memakai ui_layer/app_layer/data_layer/integration_layer. Field
-# yang tidak cocok ini disamakan di bawah supaya tidak error lagi.
 
 class TechStackUpdate(BaseModel):
-    ui_layer: Optional[str] = None
-    app_layer: Optional[str] = None
+    target_users: Optional[str] = None
+    scale: Optional[str] = None
+    platform: Optional[str] = None
+    ui_language: Optional[str] = None
+    ui_framework: Optional[str] = None
+    ui_library: Optional[str] = None
+    app_language: Optional[str] = None
+    app_framework: Optional[str] = None
     data_layer: Optional[str] = None
     integration_layer: Optional[str] = None
 
 class TechStackResponse(BaseModel):
     id: int
     project_id: int
-    ui_layer: Optional[str] = None
-    app_layer: Optional[str] = None
+    target_users: Optional[str] = None
+    scale: Optional[str] = None
+    platform: Optional[str] = None
+    ui_language: Optional[str] = None
+    ui_framework: Optional[str] = None
+    ui_library: Optional[str] = None
+    app_language: Optional[str] = None
+    app_framework: Optional[str] = None
     data_layer: Optional[str] = None
     integration_layer: Optional[str] = None
     updated_at: datetime
@@ -325,19 +337,22 @@ class TechStackResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# TAMBAHAN: Coding Guidelines — sebelumnya sama sekali belum ada di schemas.py,
-# padahal build.py sudah memanggilnya di 4 endpoint (get/create/update/delete).
+# TAMBAHAN: field "category" untuk 5 kategori tetap (project_structure, security,
+# frontend, backend, database). None berarti guideline custom buatan user.
 class CodingGuidelineCreate(BaseModel):
     title: str
     content: str
+    category: Optional[str] = None
 
 class CodingGuidelineUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    category: Optional[str] = None
 
 class CodingGuidelineResponse(BaseModel):
     id: int
     project_id: int
+    category: Optional[str] = None
     title: str
     content: str
     created_at: datetime
@@ -345,24 +360,45 @@ class CodingGuidelineResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# TAMBAHAN: Development Plans — sama seperti Coding Guidelines, belum pernah ada.
+class GenerateGuidelineRequest(BaseModel):
+    category: str  # project_structure | security | frontend | backend | database
+
+class GenerateGuidelinesAllResponse(BaseModel):
+    guidelines: List[CodingGuidelineResponse]
+    errors: List[str] = []
+
+# TAMBAHAN: status "completed" menggantikan "done", dan status baru "draft" untuk
+# hasil AI generate yang belum direview. epic_id untuk menghubungkan plan ke requirement.
 class DevelopmentPlanCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    status: Optional[str] = "todo"  # todo | in_progress | done
+    status: Optional[str] = "todo"  # draft | todo | in_progress | completed
+    epic_id: Optional[int] = None
 
 class DevelopmentPlanUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
+    epic_id: Optional[int] = None
 
 class DevelopmentPlanResponse(BaseModel):
     id: int
     project_id: int
+    epic_id: Optional[int] = None
     title: str
     description: Optional[str] = None
     status: str
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class GenerateDevPlanRequest(BaseModel):
+    epic_id: int
+
+class EpicOptionResponse(BaseModel):
+    id: int
+    name: str
 
     class Config:
         from_attributes = True
@@ -390,7 +426,6 @@ class SuggestDescriptionRequest(BaseModel):
 class SuggestDescriptionResponse(BaseModel):
     description: str
 
-# TAMBAHAN: dipakai endpoint AI Suggest di step UserTypeGoals wizard
 class SuggestUserGoalsRequest(BaseModel):
     project_name: str
     user_type_name: str
@@ -400,31 +435,26 @@ class SuggestUserGoalsResponse(BaseModel):
     goals: str
     frustrations: str
 
-# TAMBAHAN: dipakai endpoint AI Suggest di step UserJourney wizard
+class SuggestUserJourneyPersonaItem(BaseModel):
+    name: str
+    user_type: Optional[str] = None
+    about: Optional[str] = None
+
 class SuggestUserJourneyRequest(BaseModel):
     project_name: str
     project_description: Optional[str] = None
-    user_types: List[str] = []
+    personas: List[SuggestUserJourneyPersonaItem] = []  
 
-# TAMBAHAN: sebelumnya cuma ada field "journey" (teks naratif). Sekarang disertai
-# "steps" supaya journey yang di-generate AI benar-benar punya langkah-langkah
-# terstruktur, bukan cuma satu paragraf tanpa detail per tahap.
 class SuggestUserJourneyStepItem(BaseModel):
     title: str
     description: str
+    persona_name: Optional[str] = None  
 
 class SuggestUserJourneyResponse(BaseModel):
     journey: str
     steps: List[SuggestUserJourneyStepItem] = []
 
 # ================= TAMBAHAN: SKEMA KHUSUS UNTUK SAVE-REQUIREMENTS =================
-# CATATAN PENTING: sebelumnya endpoint /save-requirements memakai ProjectRequirementsOutput
-# (dari services/ai.py) langsung sebagai skema validasi input. Skema itu punya batasan
-# min_length=1 pada personas — batasan itu BENAR untuk memaksa Gemini selalu menghasilkan
-# minimal 1 persona saat generate. TAPI endpoint save-requirements juga menerima user type
-# yang ditambahkan MANUAL oleh user di wizard (tanpa persona sama sekali), sehingga validasi
-# yang sama menolaknya dengan 422. Skema di bawah ini lebih longgar (personas boleh kosong)
-# khusus untuk endpoint save, tanpa mengubah kekakuan skema generate AI.
 
 class SavePersonaItem(BaseModel):
     name: str
@@ -463,3 +493,12 @@ class SaveRequirementsPayload(BaseModel):
     epics: List[SaveEpicItem] = []
     user_stories: List[SaveUserStoryItem] = []
     nfrs: List[SaveNFRItem] = []
+
+class SuggestUserTypeDescriptionRequest(BaseModel):
+    project_name: str
+    user_type_name: str
+    project_description: Optional[str] = None
+
+class SuggestUserTypeDescriptionResponse(BaseModel):
+    description: str
+

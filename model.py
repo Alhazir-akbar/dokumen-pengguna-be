@@ -67,21 +67,10 @@ class Project(Base):
     epics = relationship("Epic", back_populates="project", cascade="all, delete-orphan")
     nfrs = relationship("NFR", back_populates="project", cascade="all, delete-orphan")
     user_journeys = relationship("UserJourney", back_populates="project", cascade="all, delete-orphan")
-    
-    # PERBAIKAN DI SINI: Tambahkan cascade="all, delete-orphan" agar tech_stacks ikut terhapus otomatis
-    tech_stack = relationship("TechStack", back_populates="project", uselist=False, cascade="all, delete-orphan")
-    
-    coding_guidelines = relationship("CodingGuideline", back_populates="project", cascade="all, delete-orphan")
-    development_plans = relationship("DevelopmentPlan", back_populates="project", cascade="all, delete-orphan")
 
-    workspace = relationship("Workspace", back_populates="projects")
-    creator = relationship("User", back_populates="projects_created")
-    ai_rules = relationship("AIRule", back_populates="project", cascade="all, delete-orphan")
-    user_types = relationship("UserType", back_populates="project", cascade="all, delete-orphan")
-    epics = relationship("Epic", back_populates="project", cascade="all, delete-orphan")
-    nfrs = relationship("NFR", back_populates="project", cascade="all, delete-orphan")
-    user_journeys = relationship("UserJourney", back_populates="project", cascade="all, delete-orphan")
-    tech_stack = relationship("TechStack", back_populates="project", uselist=False)
+    # PERBAIKAN: cascade="all, delete-orphan" agar tech_stack ikut terhapus otomatis
+    tech_stack = relationship("TechStack", back_populates="project", uselist=False, cascade="all, delete-orphan")
+
     coding_guidelines = relationship("CodingGuideline", back_populates="project", cascade="all, delete-orphan")
     development_plans = relationship("DevelopmentPlan", back_populates="project", cascade="all, delete-orphan")
 
@@ -132,6 +121,9 @@ class Epic(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     project = relationship("Project", back_populates="epics")
     stories = relationship("UserStory", back_populates="epic", cascade="all, delete-orphan")
+    # TAMBAHAN: relasi ke DevelopmentPlan, dipakai untuk menghubungkan
+    # satu Dev Plan ke Epic/requirement asalnya.
+    dev_plans = relationship("DevelopmentPlan", back_populates="epic")
 
 class UserStory(Base):
     __tablename__ = "user_stories"
@@ -149,8 +141,6 @@ class UserStory(Base):
     epic = relationship("Epic", back_populates="stories")
     user_type = relationship("UserType", back_populates="stories")
     acceptance_criteria = relationship("AcceptanceCriteria", back_populates="user_story", cascade="all, delete-orphan")
-    # TAMBAHAN: relasi ke Tech Notes & Test Cases, supaya story punya dokumentasi teknis
-    # dan skenario pengujian yang lengkap, bukan cuma acceptance criteria saja.
     tech_notes = relationship("TechNote", back_populates="user_story", cascade="all, delete-orphan")
     test_cases = relationship("TestCase", back_populates="user_story", cascade="all, delete-orphan")
 
@@ -161,7 +151,6 @@ class AcceptanceCriteria(Base):
     description = Column(String, nullable=False)
     user_story = relationship("UserStory", back_populates="acceptance_criteria")
 
-# ================= TAMBAHAN: TECH NOTES =================
 class TechNote(Base):
     __tablename__ = "tech_notes"
     id = Column(Integer, primary_key=True, index=True)
@@ -169,7 +158,6 @@ class TechNote(Base):
     content = Column(String, nullable=False)
     user_story = relationship("UserStory", back_populates="tech_notes")
 
-# ================= TAMBAHAN: TEST CASES =================
 class TestCase(Base):
     __tablename__ = "test_cases"
     id = Column(Integer, primary_key=True, index=True)
@@ -206,19 +194,48 @@ class JourneyStep(Base):
     persona = relationship("Persona", back_populates="journey_steps")
 
 # ===== FR007: BUILD MODULE =====
+# PERBAIKAN BESAR: TechStack, CodingGuideline, dan DevelopmentPlan diperluas supaya
+# datanya cocok dengan tampilan Build page yang baru (Technology Stack Configuration,
+# 5 kategori Coding Guidelines tetap, dan Dev Plans dengan status draft/todo/in_progress/completed).
 
 class TechStack(Base):
     __tablename__ = "tech_stacks"
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    ui_layer = Column(String, nullable=True)        # Contoh: React, Next.js, Vue
-    app_layer = Column(String, nullable=True)       # Contoh: FastAPI, Django, Express
-    data_layer = Column(String, nullable=True)      # Contoh: PostgreSQL, SQLite, MongoDB
-    integration_layer = Column(String, nullable=True)  # Contoh: REST API, GraphQL
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    # Relasi
+    # --- Application Details ---
+    target_users = Column(String, nullable=True)      # Contoh: "1.000 - 10.000 pengguna aktif"
+    scale = Column(String, nullable=True)              # Contoh: "Small to Medium Scale"
+
+    # --- Development Approach ---
+    platform = Column(String, nullable=True)           # Contoh: "Web-based, AI-assisted development"
+
+    # --- Architecture: User Interface Layer ---
+    ui_language = Column(String, nullable=True)        # Contoh: TypeScript
+    ui_framework = Column(String, nullable=True)       # Contoh: Next.js
+    ui_library = Column(String, nullable=True)         # Contoh: Tailwind CSS, shadcn/ui
+
+    # --- Architecture: Application Layer ---
+    app_language = Column(String, nullable=True)       # Contoh: Python
+    app_framework = Column(String, nullable=True)      # Contoh: FastAPI
+
+    # --- Architecture: Data Layer ---
+    data_layer = Column(String, nullable=True)         # Contoh: PostgreSQL (nama database)
+
+    # --- Architecture: Integration Layer ---
+    integration_layer = Column(String, nullable=True)  # Contoh: REST API
+
+    # Kolom lama, dipertahankan agar backward-compatible dengan data lama (tidak dipakai UI baru)
+    ui_layer = Column(String, nullable=True)
+    app_layer = Column(String, nullable=True)
+
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
     project = relationship("Project", back_populates="tech_stack")
 
 
@@ -227,11 +244,18 @@ class CodingGuideline(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    # category = salah satu dari project_structure | security | frontend | backend | database.
+    # None berarti guideline custom yang ditambahkan manual lewat "Add new Coding Guideline".
+    category = Column(String, nullable=True)
     title = Column(String, nullable=False)
     content = Column(String, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
-    # Relasi
     project = relationship("Project", back_populates="coding_guidelines")
 
 
@@ -240,15 +264,23 @@ class DevelopmentPlan(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    # TAMBAHAN: link opsional ke Epic/requirement asal plan ini dibuat
+    epic_id = Column(Integer, ForeignKey("epics.id"), nullable=True)
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    status = Column(String, default="todo")  # todo | in_progress | done
+    status = Column(String, default="draft")  # draft | todo | in_progress | completed
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
-    # Relasi
     project = relationship("Project", back_populates="development_plans")
+    epic = relationship("Epic", back_populates="dev_plans")
 
-    # ===== TOKEN USAGE TRACKING =====
+
+# ===== TOKEN USAGE TRACKING =====
 
 class AiTokenUsage(Base):
     __tablename__ = "ai_token_usages"

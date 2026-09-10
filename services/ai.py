@@ -42,7 +42,7 @@ class UserTypeSuggestion(BaseModel):
         min_length=1,
         max_length=1,
         description=(
-            "WAJIB berisi TEPAT 1 contoh persona fiktif yang representatif untuk tipe pengguna ini "
+            "WAJIB berisi TEPAT 1-3 contoh persona fiktif yang representatif untuk tipe pengguna ini "
             "(array ini TIDAK BOLEH kosong), supaya tim punya gambaran konkret siapa yang sebenarnya "
             "memakai fitur ini (bukan sekadar kategori abstrak). Buat persona yang realistis dan "
             "spesifik, bukan generik."
@@ -84,7 +84,7 @@ class UserStorySuggestion(BaseModel):
     )
     acceptance_criteria: List[str] = Field(
         description=(
-            "Minimal 3 dan maksimal 4 kriteria penerimaan yang SPESIFIK dan TERUKUR/TESTABLE. Tulis "
+            "Minimal 5 dan maksimal 7 kriteria penerimaan yang SPESIFIK dan TERUKUR/TESTABLE. Tulis "
             "masing-masing dalam format 'Given [kondisi awal], When [aksi user], Then [hasil yang "
             "diharapkan]'. Setiap kriteria harus bisa langsung dijadikan test case tanpa tafsir tambahan. "
             "WAJIB mencakup: (1) minimal 1 skenario normal/happy path, (2) minimal 1 skenario validasi "
@@ -96,7 +96,7 @@ class UserStorySuggestion(BaseModel):
     )
     tech_notes: List[str] = Field(
         description=(
-            "Minimal 2 dan maksimal 3 catatan teknis yang membantu developer memahami PERTIMBANGAN "
+            "Minimal 5 dan maksimal 7 catatan teknis yang membantu developer memahami PERTIMBANGAN "
             "IMPLEMENTASI sebelum coding, bukan pengulangan acceptance criteria. Contoh hal yang wajib "
             "dipertimbangkan dan disebutkan jika relevan: struktur data/field yang perlu disimpan di "
             "database, endpoint API yang kemungkinan dibutuhkan (method + tujuan singkatnya), aturan "
@@ -109,7 +109,7 @@ class UserStorySuggestion(BaseModel):
     )
     test_cases: List[str] = Field(
         description=(
-            "Minimal 3 dan maksimal 4 skenario pengujian (test case) untuk tim QA, yang BERBEDA dari "
+            "Minimal 5 dan maksimal 7 skenario pengujian (test case) untuk tim QA, yang BERBEDA dari "
             "acceptance criteria — acceptance criteria menyatakan syarat diterimanya fitur, sedangkan "
             "test case ini adalah skenario uji konkret yang bisa langsung dieksekusi manual/otomatis. "
             "Tulis dalam format: '[Nama skenario]: Langkah = [langkah-langkah uji], Hasil yang diharapkan "
@@ -170,8 +170,13 @@ class UserJourneyStepSuggestion(BaseModel):
         description=(
             "Penjelasan detail 2-3 kalimat mengenai aksi konkret yang dilakukan pengguna pada tahap ini. "
             "Sebutkan halaman, komponen UI, atau tombol spesifik yang diklik, serta bagaimana sistem merespons "
-            "aksi tersebut (misal: 'Pengguna menekan tombol Masuk di pojok kanan atas, lalu sistem memunculkan "
-            "modal popup formulir autentikasi')."
+            "aksi tersebut."
+        )
+    )
+    persona_name: str = Field(
+        description=(
+            "Nama persona (dari daftar persona yang diberikan) yang melakukan aksi pada tahap ini. "
+            "HARUS persis sama (termasuk huruf besar/kecil) dengan salah satu nama di daftar persona."
         )
     )
 
@@ -180,24 +185,24 @@ class UserJourneySuggestion(BaseModel):
     narrative: str = Field(
         description=(
             "Satu paragraf naratif (5-7 kalimat) yang menggambarkan keseluruhan alur pengalaman pengguna "
-            "secara profesional dan mengalir dari awal penggunaan hingga tujuan tercapai. Fokuskan pada "
-            "proses operasional sistem dan interaksi fungsional, hindari penggunaan nama orang atau fiksi."
+            "secara profesional dan mengalir dari awal penggunaan hingga tujuan tercapai."
         )
     )
     steps: List[UserJourneyStepSuggestion] = Field(
-        description=(
-            "5-7 tahapan berurutan dari awal (start) sampai akhir (end) yang menyusun journey ini. "
-            "Setiap tahapan harus menjelaskan langkah operasional nyata secara kronologis tanpa menggunakan "
-            "perumpamaan nama tokoh fiktif."
-        )
+        description="5-7 tahapan berurutan dari awal (start) sampai akhir (end), masing-masing di-assign ke satu persona."
     )
 
-
 class TechStackSuggestion(BaseModel):
-    ui_layer: str = Field(description="Framework/teknologi UI yang paling cocok (contoh: 'Next.js (React)')")
-    app_layer: str = Field(description="Framework/teknologi backend yang paling cocok (contoh: 'FastAPI (Python)')")
-    data_layer: str = Field(description="Database yang paling cocok (contoh: 'PostgreSQL')")
-    integration_layer: str = Field(description="Protokol/pola integrasi yang paling cocok (contoh: 'REST API')")
+    target_users: str = Field(description="Perkiraan skala/segmen target pengguna aplikasi (contoh: '1.000 - 10.000 pengguna aktif bulanan')")
+    scale: str = Field(description="Perkiraan skala sistem yang dibutuhkan (contoh: 'Small to Medium Scale')")
+    platform: str = Field(description="Pendekatan pengembangan/platform yang direkomendasikan (contoh: 'Web-based, AI-assisted development dengan Claude Code/Cursor')")
+    ui_language: str = Field(description="Bahasa pemrograman utama untuk UI Layer (contoh: 'TypeScript')")
+    ui_framework: str = Field(description="Framework UI (contoh: 'Next.js (React)')")
+    ui_library: str = Field(description="Library/komponen UI (contoh: 'Tailwind CSS + shadcn/ui')")
+    app_language: str = Field(description="Bahasa pemrograman backend (contoh: 'Python')")
+    app_framework: str = Field(description="Framework backend (contoh: 'FastAPI')")
+    data_layer: str = Field(description="Database utama (contoh: 'PostgreSQL')")
+    integration_layer: str = Field(description="Protokol/pola integrasi (contoh: 'REST API + Webhooks')")
 
 
 class GuidelineSuggestion(BaseModel):
@@ -215,26 +220,27 @@ class CodingGuidelinesSuggestion(BaseModel):
         description="3-5 coding guideline paling penting untuk proyek ini, spesifik terhadap tech stack yang dipakai."
     )
 
-
 class DevPlanItemSuggestion(BaseModel):
     title: str = Field(description="Judul task pengembangan (contoh: 'Implementasi Autentikasi & Registrasi')")
     description: str = Field(description="Deskripsi singkat 1-2 kalimat cakupan task ini")
-
 
 class DevPlanSuggestion(BaseModel):
     items: List[DevPlanItemSuggestion] = Field(
         description="Daftar task pengembangan awal, satu task per Epic yang diberikan, dengan urutan prioritas logis (fondasi/autentikasi duluan)."
     )
 
+class DevPlanDetailSuggestion(BaseModel):
+    title: str = Field(description="Judul task development, boleh mengikuti nama epic")
+    description: str = Field(
+        description=(
+            "Rencana pengembangan yang detail dan actionable untuk dipakai AI coding agent langsung "
+            "mengimplementasikan epic ini. Sertakan: (1) ringkasan cakupan kerja, (2) daftar langkah "
+            "implementasi berurutan, (3) catatan teknis penting (mengacu ke tech stack & coding "
+            "guidelines proyek bila relevan), (4) definisi selesai (definition of done)."
+        )
+    )
 
 # ================= KONFIGURASI 3 PROVIDER AI =================
-# Tiga provider dipakai bergiliran (round-robin) untuk generate, supaya beban tidak
-# numpuk di satu API key/model saja dan lebih tahan terhadap rate limit.
-#
-# 1. Gemini        -> pakai SDK resmi google-genai, support response_schema native.
-# 2. OpenRouter     -> OpenAI-compatible, dipanggil lewat SDK `openai` dengan base_url custom.
-# 3. Groq Cloud     -> OpenAI-compatible juga, sama caranya dengan OpenRouter.
-
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
@@ -246,8 +252,6 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 
-# Client dibuat sekali di level modul. Kalau salah satu API key tidak diset,
-# client-nya jadi None dan provider itu otomatis dilewati saat giliran (bukan crash).
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 openrouter_client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL) if OPENROUTER_API_KEY else None
 groq_client = OpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL) if GROQ_API_KEY else None
@@ -437,7 +441,7 @@ def _generate_text(prompt: str, temperature: float = 0.5) -> str:
     )
 
 
-# ================= FUNGSI-FUNGSI GENERATE (PUBLIC API - TIDAK BERUBAH SIGNATURE-NYA) =================
+# ================= FUNGSI-FUNGSI GENERATE (PUBLIC API) =================
 
 def generate_project_requirements(
     project_name: str,
@@ -482,14 +486,14 @@ def generate_project_requirements(
 
     1. USER TYPES
         - Identifikasi seluruh tipe pengguna relevan berdasarkan target pengguna dan domain bisnis.
-        - Deskripsi tiap tipe CUKUP SINGKAT (maksimal 3 kalimat) — cukup identitas, peran, dan tingkat
+        - Deskripsi tiap tipe CUKUP SINGKAT (maksimal 6 kalimat) — cukup identitas, peran, dan tingkat
           akses. JANGAN dibuat panjang; kedalaman requirement difokuskan ke Epic dan User Story di
           bawah, bukan di sini.
         - Setiap User Type WAJIB disertai TEPAT 1 contoh persona fiktif yang konkret (nama, usia,
           lokasi, pekerjaan, latar belakang singkat, goals, frustrations) — lihat skema PersonaSuggestion.
 
     2. EPICS
-        - Susun 3-5 Epic (tidak perlu lebih) yang mencakup fungsi utama aplikasi, termasuk minimal:
+        - Susun 5-7 Epic (tidak perlu lebih) yang mencakup fungsi utama aplikasi, termasuk minimal:
           autentikasi/manajemen akun dan fitur inti sesuai domain bisnis.
         - Setiap Epic harus DETAIL dan KONKRET (lihat definisi field description pada skema): sebutkan
           fitur/layar spesifik yang termasuk di dalamnya, bukan cuma nama kategori umum. Epic yang
@@ -497,7 +501,7 @@ def generate_project_requirements(
         - Setiap Epic harus punya cakupan yang jelas dan tidak tumpang tindih dengan Epic lain.
 
     3. USER STORIES
-        - Setiap Epic memiliki 2-3 User Story PALING PENTING/PALING INTI saja (bukan mencoba
+        - Setiap Epic memiliki 5-7 User Story PALING PENTING/PALING INTI saja (bukan mencoba
           mencakup semua kemungkinan aksi) — kualitas dan kedalaman tiap story jauh lebih penting
           daripada kuantitas. Lebih baik sedikit story yang sangat detail daripada banyak story
           yang dangkal.
@@ -527,10 +531,6 @@ def generate_project_requirements(
     """
 
     try:
-        # max_tokens digenerelisir ke seluruh provider (bukan cuma Gemini) karena
-        # output requirement ini memang berat -- kalau provider yang lagi giliran
-        # tidak sanggup (output kepotong / limit), dispatcher akan otomatis coba
-        # provider berikutnya.
         return _generate_structured(prompt, ProjectRequirementsOutput, temperature=0.3, max_tokens=32768)
     except Exception as e:
         raise RuntimeError(f"Gagal generate project requirements: {str(e)}") from e
@@ -559,6 +559,43 @@ def suggest_project_description(project_name: str, platform_type: str) -> str:
 
     return description
 
+def suggest_user_type_description(project_name: str, user_type_name: str, project_description: str = "") -> str:
+    """
+    Menghasilkan draf deskripsi singkat (maksimal 6 kalimat) untuk SATU tipe pengguna,
+    dipakai tombol AI Suggest (ikon Sparkles) di step UserTypes wizard.
+    """
+    context_line = (
+        f"Deskripsi proyek: {project_description}"
+        if project_description
+        else "Tidak ada deskripsi proyek tambahan."
+    )
+
+    prompt = f"""
+Kamu adalah business analyst berpengalaman yang membantu menyusun dokumentasi kebutuhan software.
+
+Nama Proyek: {project_name}
+{context_line}
+Tipe Pengguna: {user_type_name}
+
+Tugasmu: tuliskan deskripsi singkat dan padat (MAKSIMAL 3 kalimat, jangan lebih panjang) untuk
+tipe pengguna "{user_type_name}" pada proyek "{project_name}" ini. Jelaskan: (1) siapa mereka,
+(2) apa peran utama mereka di aplikasi ini, dan (3) tingkat akses mereka dibanding tipe pengguna
+lain. Deskripsi harus kontekstual terhadap nama dan deskripsi proyek ini -- JANGAN kalimat
+generik yang bisa berlaku untuk aplikasi apa saja.
+
+Tulis dalam Bahasa Indonesia, gaya natural dan profesional, tanpa markdown, tanpa tanda kutip di
+awal/akhir.
+""".strip()
+
+    try:
+        description = _generate_text(prompt, temperature=0.5)
+    except Exception as e:
+        raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
+
+    if not description:
+        raise ValueError("AI tidak menghasilkan deskripsi")
+
+    return description
 
 def suggest_user_goals(project_name: str, user_type_name: str, user_type_description: str) -> UserGoalsSuggestion:
     """Menghasilkan saran goals & frustrations untuk satu tipe pengguna, dipakai di step UserTypeGoals wizard"""
@@ -589,27 +626,41 @@ Tulis dalam Bahasa Indonesia, gaya natural dan profesional.
         raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
 
 
-def suggest_user_journey(project_name: str, project_description: str, user_types: List[str]) -> UserJourneySuggestion:
-    """Menghasilkan draf narasi DAN langkah-langkah user journey terstruktur dari awal sampai akhir secara detail tanpa nama fiktif."""
-    user_types_line = (
-        f"Tipe pengguna yang terlibat: {', '.join(user_types)}."
-        if user_types
-        else "Tidak ada informasi tipe pengguna spesifik."
-    )
+def suggest_user_journey(
+    project_name: str,
+    project_description: str,
+    personas: List[dict],
+) -> UserJourneySuggestion:
+    """
+    personas: list of {"name": str, "user_type": str, "about": str}
+    Diambil dari semua Persona di project (lintas UserType), supaya AI bisa
+    assign step ke persona yang benar-benar ada di project ini.
+    """
+    if personas:
+        personas_lines = "\n".join(
+            f"- {p['name']} (Tipe: {p.get('user_type', '-')})"
+            f"{': ' + p['about'] if p.get('about') else ''}"
+            for p in personas
+        )
+    else:
+        personas_lines = "Tidak ada persona terdaftar."
 
     prompt = f"""
 Kamu adalah UX researcher dan system analyst profesional. Buatlah draf user journey yang komprehensif, logis, dan detail untuk aplikasi ini dari awal (start) sampai selesai (end).
 
 Nama Proyek: {project_name}
 Deskripsi Proyek: {project_description or 'Tidak ada deskripsi.'}
-{user_types_line}
+
+DAFTAR PERSONA YANG TERLIBAT (WAJIB dipakai untuk assign persona_name di setiap step, JANGAN membuat nama baru di luar daftar ini):
+{personas_lines}
 
 ATURAN KETAT:
-1. JANGAN menggunakan perumpamaan nama fiktif/tokoh (misalnya: hindari kalimat seperti "Budi membuka aplikasi..."). Gunakan sudut pandang objektif atau sebut langsung peran penggunanya (misalnya: "Pengguna", "Admin", atau "Sistem").
-2. Buat alur dari awal titik masuk (start) hingga mencapai tujuan akhir (end) secara runtut.
-3. Hasilkan dalam dua bentuk:
+1. Setiap step WAJIB di-assign ke SATU persona dari daftar di atas yang paling relevan melakukan aksi tersebut. Field "persona_name" harus PERSIS SAMA (termasuk huruf besar/kecil) dengan salah satu nama persona di daftar -- jangan mengarang nama baru.
+2. Journey boleh melibatkan lebih dari satu persona berbeda di step yang berbeda jika relevan dengan alur (misal: User submit request di step 2, lalu Admin approve di step 3).
+3. Buat alur dari awal titik masuk (start) hingga mencapai tujuan akhir (end) secara runtut dan operasional.
+4. Hasilkan dalam dua bentuk:
    (1) narrative: paragraf ringkasan alur secara utuh, profesional, dan operasional.
-   (2) steps: 5 hingga 7 tahapan berurutan dari awal sampai akhir, di mana setiap tahapan menjelaskan aksi sistem/pengguna secara spesifik dan teknis.
+   (2) steps: 10 hingga 15 tahapan berurutan, tiap tahap punya title, description, dan persona_name.
 
 Tulis dalam Bahasa Indonesia, gaya natural dan profesional.
 """.strip()
@@ -621,12 +672,18 @@ Tulis dalam Bahasa Indonesia, gaya natural dan profesional.
 
 
 def suggest_tech_stack(project_name: str, project_description: str, application_type: str) -> TechStackSuggestion:
-    """Menyarankan technology stack awal berdasarkan konteks proyek"""
+    """Menyarankan seluruh konfigurasi Technology Stack (Application Details, Development
+    Approach, dan Architecture per-layer) berdasarkan konteks proyek."""
     prompt = f"""
 Kamu adalah Solutions Architect berpengalaman. Berdasarkan detail proyek berikut, sarankan
-technology stack yang paling sesuai untuk 4 lapisan arsitektur: UI, Application, Data, dan
-Integration. Pilih teknologi yang umum, stabil, dan sesuai skala proyek ini -- bukan pilihan
-eksotis tanpa alasan kuat.
+konfigurasi technology stack yang paling sesuai, mencakup:
+(1) perkiraan target pengguna & skala sistem,
+(2) pendekatan/platform pengembangan (misalnya web-based dengan AI-assisted development),
+(3) arsitektur 4 lapisan: User Interface (bahasa, framework, UI library), Application (bahasa,
+    framework), Data (database), dan Integration (protokol).
+
+Pilih teknologi yang umum, stabil, dan sesuai skala proyek ini -- bukan pilihan eksotis tanpa
+alasan kuat.
 
 Nama Proyek: {project_name}
 Deskripsi: {project_description or 'Tidak ada deskripsi.'}
@@ -641,16 +698,51 @@ Tulis dalam Bahasa Indonesia untuk penjelasan jika ada, tapi nama teknologi teta
     except Exception as e:
         raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
 
+GUIDELINE_CATEGORY_LABELS = {
+    "project_structure": "Project Structure",
+    "security": "Security",
+    "frontend": "Frontend Guidelines",
+    "backend": "Backend Guidelines",
+    "database": "Database Guidelines",
+}
+
+def suggest_guideline_by_category(project_name: str, tech_stack_summary: str, category_key: str) -> GuidelineSuggestion:
+    """Menyarankan draf SATU coding guideline untuk satu kategori tetap (project_structure,
+    security, frontend, backend, atau database), spesifik terhadap tech stack proyek."""
+    label = GUIDELINE_CATEGORY_LABELS.get(category_key, category_key)
+    prompt = f"""
+Kamu adalah Tech Lead berpengalaman yang menyusun coding guidelines untuk tim developer baru.
+
+Nama Proyek: {project_name}
+Tech Stack: {tech_stack_summary or 'Belum ditentukan, gunakan asumsi stack modern yang umum untuk aplikasi web.'}
+Kategori Guideline: {label}
+
+Tuliskan SATU guideline lengkap khusus kategori "{label}" untuk proyek ini. Isi harus konkret,
+actionable, dan spesifik terhadap tech stack di atas (dalam bentuk paragraf atau beberapa
+poin singkat yang digabung jadi satu isi), bukan saran generik yang bisa berlaku untuk stack
+apa saja.
+
+Field "title" WAJIB persis: "{label}"
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+    try:
+        return _generate_structured(prompt, GuidelineSuggestion, temperature=0.3)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate guideline kategori {label}: {str(e)}") from e
+
 
 def suggest_coding_guidelines(project_name: str, tech_stack_summary: str) -> CodingGuidelinesSuggestion:
-    """Menyarankan draf coding guidelines awal berdasarkan tech stack proyek"""
+    """[LEGACY] Menyarankan draf coding guidelines bebas (5-7 item) berdasarkan tech stack.
+    Dipertahankan untuk kompatibilitas, halaman Build sekarang memakai
+    suggest_guideline_by_category untuk 5 kategori tetap."""
     prompt = f"""
 Kamu adalah Tech Lead berpengalaman yang menyusun coding guidelines untuk tim developer baru.
 
 Nama Proyek: {project_name}
 Tech Stack: {tech_stack_summary}
 
-Susun 3-5 coding guideline paling penting dan actionable untuk stack ini (contoh topik: struktur
+Susun 5-7 coding guideline paling penting dan actionable untuk stack ini (contoh topik: struktur
 folder, konvensi penamaan, penanganan error, testing, keamanan dasar) -- sesuaikan dengan
 teknologi yang disebutkan, jangan generik.
 
@@ -664,7 +756,8 @@ Tulis dalam Bahasa Indonesia.
 
 
 def suggest_dev_plan(project_name: str, epic_names: List[str]) -> DevPlanSuggestion:
-    """Menyusun draf development plan awal berdasarkan daftar Epic yang sudah di-generate"""
+    """[LEGACY] Menyusun draf development plan ringkas (satu per Epic). Dipertahankan untuk
+    kompatibilitas, halaman Build sekarang memakai suggest_dev_plan_for_epic yang lebih detail."""
     epics_line = ", ".join(epic_names) if epic_names else "Tidak ada epic yang terdaftar."
 
     prompt = f"""
@@ -676,7 +769,7 @@ Daftar Epic: {epics_line}
 
 Buat satu task development untuk MASING-MASING epic di atas (jumlah task = jumlah epic),
 diurutkan berdasarkan prioritas logis (fondasi seperti autentikasi/setup lebih dulu). Judul
-task boleh mengikuti nama epic-nya, deskripsi singkat 1-2 kalimat cakupan kerjanya.
+task boleh mengikuti nama epic-nya, deskripsi singkat 3-4 kalimat cakupan kerjanya.
 
 Tulis dalam Bahasa Indonesia.
 """.strip()
@@ -685,3 +778,33 @@ Tulis dalam Bahasa Indonesia.
         return _generate_structured(prompt, DevPlanSuggestion, temperature=0.3)
     except Exception as e:
         raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
+
+
+def suggest_dev_plan_for_epic(
+    project_name: str,
+    epic_name: str,
+    epic_description: str,
+    tech_stack_summary: str,
+    guidelines_summary: str,
+) -> DevPlanDetailSuggestion:
+    """Menyusun SATU Development Plan detail untuk satu Epic/requirement, siap dipakai
+    AI coding agent (Claude Code, Cursor, Lovable, v0, dsb) untuk implementasi langsung."""
+    prompt = f"""
+Kamu adalah Tech Lead/Project Manager teknis yang menyusun development plan detail untuk
+dieksekusi oleh AI coding agent (Claude Code, Cursor, Lovable, v0, dsb).
+
+Nama Proyek: {project_name}
+Epic/Modul: {epic_name}
+Deskripsi Epic: {epic_description or 'Tidak ada deskripsi tambahan.'}
+Tech Stack Proyek: {tech_stack_summary or 'Belum ditentukan.'}
+Coding Guidelines Proyek: {guidelines_summary or 'Belum ada guideline khusus, gunakan best practice umum.'}
+
+Susun development plan yang detail dan siap dieksekusi langsung oleh AI coding agent tanpa
+klarifikasi tambahan sesuai skema yang ditentukan.
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+    try:
+        return _generate_structured(prompt, DevPlanDetailSuggestion, temperature=0.3, max_tokens=4096)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate dev plan untuk epic {epic_name}: {str(e)}") from e
