@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-
+from services.ai import suggest_ai_rules
 import model
 import schemas
 import auth
@@ -114,6 +114,7 @@ def get_workspace_ai_rules(
         model.AIRule.project_id == None
     ).all()
     return rules
+
 # ================= PENGHAPUSAN ATURAN AI (UMUM) =================
 @router.delete("/api/ai-rules/{id}")
 def delete_ai_rule(
@@ -146,3 +147,37 @@ def delete_ai_rule(
     db.delete(rule)
     db.commit()
     return {"message": "Aturan AI berhasil dihapus"}
+
+# ================= TAMBAHAN: SARAN AI RULES DARI AI =================
+@router.post("/api/projects/{project_id}/ai-rules/suggest", response_model=schemas.AIRuleSuggestionsResponse)
+def suggest_project_ai_rules(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Memanggil AI untuk menyarankan beberapa draf AI Rule berdasarkan konteks proyek"""
+    project = db.query(model.Project).filter(model.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyek tidak ditemukan")
+
+    check_workspace_access(
+        workspace_id=project.workspace_id,
+        user_id=current_user.id,
+        db=db,
+    )
+
+    try:
+        result = suggest_ai_rules(
+            project_name=project.name,
+            project_description=project.description or "",
+            application_type=project.application_type or "",
+            domain_business=project.domain_business or "",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI gagal memberikan saran aturan: {str(e)}")
+
+    return schemas.AIRuleSuggestionsResponse(
+        suggestions=[
+            schemas.AIRuleSuggestionItem(name=r.name, content=r.content) for r in result.rules
+        ]
+    )

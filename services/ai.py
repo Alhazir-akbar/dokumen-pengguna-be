@@ -240,6 +240,65 @@ class DevPlanDetailSuggestion(BaseModel):
         )
     )
 
+# ================= TAMBAHKAN skema ini di dekat skema-skema lain (bagian atas) =================
+
+class AIRuleSuggestionItem(BaseModel):
+    name: str = Field(
+        description="Judul singkat aturan (misal: 'Gaya Bahasa Formal', 'Format User Story Wajib Bahasa Indonesia')"
+    )
+    content: str = Field(
+        description=(
+            "Isi aturan yang jelas dan actionable, 2-4 kalimat, spesifik terhadap konteks proyek ini "
+            "-- bukan saran generik yang bisa berlaku untuk proyek apa saja."
+        )
+    )
+
+
+class AIRuleSuggestionsOutput(BaseModel):
+    rules: List[AIRuleSuggestionItem] = Field(
+        description=(
+            "3-5 saran AI Rules yang relevan dan spesifik untuk proyek ini. Cakup aspek-aspek seperti "
+            "gaya bahasa/istilah yang dipakai, format penulisan user story, tingkat detail teknis yang "
+            "diharapkan, konvensi penamaan, batasan cakupan, atau standar kepatuhan/regulasi yang "
+            "relevan dengan domain bisnis proyek ini."
+        )
+    )
+
+
+# ================= TAMBAHKAN fungsi ini di dekat fungsi suggest_* lainnya =================
+
+def suggest_ai_rules(
+    project_name: str,
+    project_description: str,
+    application_type: str = "",
+    domain_business: str = "",
+) -> AIRuleSuggestionsOutput:
+    """Menyarankan beberapa draf AI Rules untuk sebuah project, dipakai tombol
+    'Generate' di tab AI Rules halaman Settings."""
+    prompt = f"""
+Kamu adalah Senior Business Analyst yang membantu menyusun AI Rules -- instruksi khusus yang akan
+memandu AI dalam men-generate dokumentasi kebutuhan software (user story, persona, journey, NFR, dsb)
+untuk sebuah proyek.
+
+Nama Proyek: {project_name}
+Deskripsi: {project_description or 'Tidak ada deskripsi.'}
+Tipe Aplikasi: {application_type or 'Tidak disebutkan'}
+Domain Bisnis: {domain_business or 'Tidak disebutkan'}
+
+Sarankan 3-5 AI Rules yang relevan dan spesifik untuk proyek ini. Setiap rule harus actionable dan
+bisa langsung memandu AI, contoh topik: gaya bahasa/istilah yang dipakai, format penulisan user story,
+tingkat detail teknis yang diharapkan, konvensi penamaan, batasan cakupan tertentu, atau standar
+kepatuhan/regulasi yang relevan dengan domain bisnis ini. Hindari saran generik yang bisa berlaku
+untuk proyek apa saja.
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, AIRuleSuggestionsOutput, temperature=0.5)
+    except Exception as e:
+        raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
+    
 # ================= KONFIGURASI 3 PROVIDER AI =================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
@@ -375,7 +434,6 @@ def _call_openai_compatible(
     result_json = json.loads(candidate)
     return schema(**result_json)
 
-
 def _generate_structured(prompt: str, schema: Type[T], temperature: float = 0.3, max_tokens: Optional[int] = None) -> T:
     """
     Dispatcher utama untuk semua generate yang butuh output terstruktur (JSON -> Pydantic).
@@ -404,7 +462,6 @@ def _generate_structured(prompt: str, schema: Type[T], temperature: float = 0.3,
         "Semua provider AI (Gemini, OpenRouter, Groq) gagal merespons secara bergiliran. "
         "Detail per provider: " + " || ".join(errors)
     )
-
 
 def _generate_text(prompt: str, temperature: float = 0.5) -> str:
     """Dispatcher untuk generate teks bebas (non-JSON), dengan round-robin + fallback yang sama."""
@@ -493,7 +550,7 @@ def generate_project_requirements(
           lokasi, pekerjaan, latar belakang singkat, goals, frustrations) — lihat skema PersonaSuggestion.
 
     2. EPICS
-        - Susun 5-7 Epic (tidak perlu lebih) yang mencakup fungsi utama aplikasi, termasuk minimal:
+        - Susun 7 - 12 Epic (tidak perlu lebih) yang mencakup fungsi utama aplikasi, termasuk minimal:
           autentikasi/manajemen akun dan fitur inti sesuai domain bisnis.
         - Setiap Epic harus DETAIL dan KONKRET (lihat definisi field description pada skema): sebutkan
           fitur/layar spesifik yang termasuk di dalamnya, bukan cuma nama kategori umum. Epic yang
@@ -501,7 +558,7 @@ def generate_project_requirements(
         - Setiap Epic harus punya cakupan yang jelas dan tidak tumpang tindih dengan Epic lain.
 
     3. USER STORIES
-        - Setiap Epic memiliki 5-7 User Story PALING PENTING/PALING INTI saja (bukan mencoba
+        - Setiap Epic memiliki 7-10 User Story PALING PENTING/PALING INTI saja (bukan mencoba
           mencakup semua kemungkinan aksi) — kualitas dan kedalaman tiap story jauh lebih penting
           daripada kuantitas. Lebih baik sedikit story yang sangat detail daripada banyak story
           yang dangkal.

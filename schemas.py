@@ -106,6 +106,13 @@ class AIRuleCreate(BaseModel):
     name: str
     content: str
 
+class AIRuleSuggestionItem(BaseModel):
+    name: str
+    content: str
+
+class AIRuleSuggestionsResponse(BaseModel):
+    suggestions: List[AIRuleSuggestionItem] = []
+    
 class AIRuleResponse(BaseModel):
     id: int
     name: str
