@@ -325,6 +325,14 @@ class TechStackUpdate(BaseModel):
     app_framework: Optional[str] = None
     data_layer: Optional[str] = None
     integration_layer: Optional[str] = None
+    additional_technologies: Optional[List[str]] = None
+    lines_of_code: Optional[str] = None
+    years_in_development: Optional[str] = None
+    size_class: Optional[str] = None
+    code_structure: Optional[str] = None
+    has_db_logic: Optional[str] = None
+    uses_microservices: Optional[str] = None
+    complexity_notes: Optional[str] = None
 
 class TechStackResponse(BaseModel):
     id: int
@@ -339,6 +347,15 @@ class TechStackResponse(BaseModel):
     app_framework: Optional[str] = None
     data_layer: Optional[str] = None
     integration_layer: Optional[str] = None
+    updated_at: datetime
+    additional_technologies: Optional[List[str]] = None
+    lines_of_code: Optional[str] = None
+    years_in_development: Optional[str] = None
+    size_class: Optional[str] = None
+    code_structure: Optional[str] = None
+    has_db_logic: Optional[str] = None
+    uses_microservices: Optional[str] = None
+    complexity_notes: Optional[str] = None
     updated_at: datetime
 
     class Config:

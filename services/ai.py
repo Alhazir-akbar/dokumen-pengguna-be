@@ -163,8 +163,6 @@ class UserGoalsSuggestion(BaseModel):
         )
     )
 
-<<<<<<< Updated upstream
-
 class UserJourneyStepSuggestion(BaseModel):
     title: str = Field(description="Judul singkat tahapan ini (misal: 'Membuka Halaman Utama', 'Mengisi Formulir Pendaftaran')")
     description: str = Field(
@@ -180,17 +178,12 @@ class UserJourneyStepSuggestion(BaseModel):
             "HARUS persis sama (termasuk huruf besar/kecil) dengan salah satu nama di daftar persona."
         )
     )
-=======
+
 api_key = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=api_key)
 client = gemini_client  
 
-# CATATAN: model varian "flash" dioptimalkan untuk kecepatan & ringkas. Untuk requirement
-# dokumen yang butuh detail & reasoning lebih dalam, pertimbangkan model non-flash (varian
-# "pro") jika tersedia di akun Anda dan kecepatan generate bukan prioritas utama.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
->>>>>>> Stashed changes
-
 
 class UserJourneySuggestion(BaseModel):
     narrative: str = Field(

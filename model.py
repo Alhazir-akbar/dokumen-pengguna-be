@@ -230,6 +230,16 @@ class TechStack(Base):
     ui_layer = Column(String, nullable=True)
     app_layer = Column(String, nullable=True)
 
+    # ===== TAMBAHAN: hasil wizard "Translate" (reverse engineer existing software) =====
+    additional_technologies = Column(String, nullable=True)  # JSON-encoded list, e.g. '["React","PostgreSQL"]'
+    lines_of_code = Column(String, nullable=True)             # diisi kalau user tahu jumlah baris kode
+    years_in_development = Column(String, nullable=True)      # diisi kalau user gak tahu lines_of_code
+    size_class = Column(String, nullable=True)                # small | medium | large
+    code_structure = Column(String, nullable=True)            # modular | monolithic | legacy
+    has_db_logic = Column(String, nullable=True)               # "yes" | "no"
+    uses_microservices = Column(String, nullable=True)         # "yes" | "no"
+    complexity_notes = Column(String, nullable=True)           # jawaban textarea "other complexity"
+
     updated_at = Column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
@@ -237,7 +247,6 @@ class TechStack(Base):
     )
 
     project = relationship("Project", back_populates="tech_stack")
-
 
 class CodingGuideline(Base):
     __tablename__ = "coding_guidelines"
