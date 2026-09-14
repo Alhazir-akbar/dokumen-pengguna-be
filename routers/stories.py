@@ -38,10 +38,10 @@ def update_story(id: int, data: schemas.UserStoryCreate, db: Session = Depends(g
     db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
     if not db_story:
         raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
-    
+
     for key, value in data.model_dump().items():
         setattr(db_story, key, value)
-        
+
     db.commit()
     db.refresh(db_story)
     return db_story
@@ -54,6 +54,69 @@ def delete_story(id: int, db: Session = Depends(get_db), current_user: model.Use
     db.delete(db_story)
     db.commit()
     return {"message": "User story berhasil dihapus"}
+
+# ================= TAMBAHAN: SEED EXAMPLE STORY (AiChoice -> "No, not at this stage") =================
+@router.post("/seed-example", status_code=status.HTTP_201_CREATED)
+def seed_example_story(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """
+    Membuat 1 Epic + 1 User Story contoh (lengkap dengan Acceptance Criteria)
+    untuk project yang baru dibuat, supaya dashboard Stories tidak kosong total
+    saat user memilih 'No, not at this stage' di step AiChoice.
+
+    Idempotent: kalau project ini sudah punya epic (misal user klik lagi atau
+    reload), tidak akan bikin duplikat -- langsung return tanpa insert baru.
+    """
+    existing_epic = db.query(model.Epic).filter(model.Epic.project_id == project_id).first()
+    if existing_epic:
+        return {"message": "Project sudah memiliki data, seed dilewati.", "epic_id": existing_epic.id}
+
+    db_epic = model.Epic(
+        name="Getting Started",
+        description="Contoh Epic bawaan untuk membantu kamu memahami struktur Userdoc.",
+        project_id=project_id,
+    )
+    db.add(db_epic)
+    db.commit()
+    db.refresh(db_epic)
+
+    db_story = model.UserStory(
+        epic_id=db_epic.id,
+        code="US-1.1",
+        as_a="Customer",
+        i_want="to create my first user story",
+        so_that="I can describe the requirements of my system in a language everyone can understand",
+        status="draft",
+        project_id=project_id,
+    )
+    db.add(db_story)
+    db.commit()
+    db.refresh(db_story)
+
+    example_criteria = [
+        'Use acceptance criteria to capture what needs to happen for this story to be "done"',
+        "It should be clear and concise",
+        "Able to be understood by everyone",
+        "Focus on the user's perspective",
+        "Testable, meaning it can be used for defining, implementing, and testing a story",
+        "You can link to other user stories by typing hash '#' and then the name of the story",
+        "This helps you build a navigable map of your system",
+        "You can also add resource links to each story in the 'Resources' panel on the right hand",
+        "You can add images to your stories for better visualization of requirements or design mockups",
+        "Images can be referenced directly within your descriptions and acceptance criteria",
+        "This helps stakeholders understand the visual aspects of requirements",
+    ]
+
+    for desc in example_criteria:
+        db.add(model.AcceptanceCriteria(user_story_id=db_story.id, description=desc))
+
+    db.commit()
+
+    return {"message": "Example story berhasil dibuat.", "epic_id": db_epic.id, "story_id": db_story.id}
+
 
 # ================= TAMBAHAN: BATCH SAVE DARI WIZARD =================
 @router.post("/batch", status_code=status.HTTP_201_CREATED)
