@@ -181,7 +181,7 @@ class UserJourneyStepSuggestion(BaseModel):
 
 api_key = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=api_key)
-client = gemini_client  
+client = gemini_client
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
