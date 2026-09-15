@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
+from services.email import send_reset_password_email
 
 import model
 import schemas
@@ -88,14 +89,20 @@ def forgot_password(request: schemas.ForgotPasswordRequest, db: Session = Depend
         data={"sub": user.email, "type": "reset"}, 
         expires_delta=reset_token_expires
     )
-    #  Simulasi Pengiriman Email: Cetak link reset ke terminal console
+    
+    #  Kirim Email Reset Password
+        #  Kirim Email Reset Password
     reset_link = f"http://localhost:3000/reset-password?token={reset_token}"
+    
+    # Kirim email asli via Brevo
+    send_reset_password_email(to_email=user.email, reset_link=reset_link)
+
     print("\n" + "="*60)
     print("MOCK EMAIL SYSTEM - LINK RESET PASSWORD")
     print(f"Kirim Ke: {user.email}")
     print(f"Link Reset: {reset_link}")
     print("="*60 + "\n")
-    return {"message": "Link reset password berhasil dikirim ke email (Simulasi)"}
+    return {"message": "Link reset password berhasil dikirim ke email"}
 @router.post("/reset-password")
 def reset_password(request: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
