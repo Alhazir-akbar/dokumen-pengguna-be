@@ -268,7 +268,6 @@ class AIRuleSuggestionsOutput(BaseModel):
         )
     )
 
-
 # ================= TAMBAHKAN fungsi ini di dekat fungsi suggest_* lainnya =================
 
 def suggest_ai_rules(
