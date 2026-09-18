@@ -218,6 +218,18 @@ class TestCaseResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class UserStoryUpdate(BaseModel):
+    epic_id: Optional[int] = None
+    user_type_id: Optional[int] = None
+    code: Optional[str] = None
+    as_a: Optional[str] = None
+    i_want: Optional[str] = None
+    so_that: Optional[str] = None
+    status: Optional[str] = None
+    acceptance_criteria: Optional[List[str]] = None
+    tech_notes: Optional[List[str]] = None
+    test_cases: Optional[List[str]] = None
+    
 class UserStoryCreate(BaseModel):
     epic_id: int
     user_type_id: Optional[int] = None
@@ -526,3 +538,18 @@ class SuggestUserTypeDescriptionRequest(BaseModel):
 class SuggestUserTypeDescriptionResponse(BaseModel):
     description: str
 
+# ================= TAMBAHAN: AI SUGGEST USER STORY =================
+class StoryAiSuggestRequest(BaseModel):
+    as_a: Optional[str] = ""
+    i_want: Optional[str] = ""
+    so_that: Optional[str] = ""
+    epic_name: Optional[str] = ""
+    project_name: Optional[str] = ""
+
+class StoryAiSuggestResponse(BaseModel):
+    as_a: str
+    i_want: str
+    so_that: str
+    acceptance_criteria: List[str]
+    tech_notes: List[str]
+    test_cases: List[str]

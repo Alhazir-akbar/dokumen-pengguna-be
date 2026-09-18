@@ -863,3 +863,53 @@ Tulis dalam Bahasa Indonesia.
         return _generate_structured(prompt, DevPlanDetailSuggestion, temperature=0.3, max_tokens=4096)
     except Exception as e:
         raise RuntimeError(f"Gagal generate dev plan untuk epic {epic_name}: {str(e)}") from e
+
+# ================= TAMBAHAN: REGENERATE / REFINE SINGLE USER STORY =================
+
+class SingleStoryRegenerateSuggestion(BaseModel):
+    as_a: str = Field(description="Role atau persona pengguna yang spesifik (misal: Pelanggan Terdaftar, Admin Finansial)")
+    i_want: str = Field(description="Aksi atau fitur spesifik yang ingin dilakukan pengguna")
+    so_that: str = Field(description="Manfaat atau nilai bisnis yang diperoleh dari fitur tersebut")
+    acceptance_criteria: List[str] = Field(
+        description="3-5 kriteria penerimaan spesifik dalam format: 'Given [kondisi], When [aksi], Then [hasil]'"
+    )
+    tech_notes: List[str] = Field(
+        description="3-5 catatan teknis konkret untuk developer (struktur data, API endpoint, validasi, keamanan)"
+    )
+    test_cases: List[str] = Field(
+        description="2-4 skenario pengujian untuk tim QA (contoh: 'Validasi form submit tanpa field wajib')"
+    )
+
+
+def suggest_story_refinement(
+    as_a: str = "",
+    i_want: str = "",
+    so_that: str = "",
+    epic_name: str = "",
+    project_name: str = ""
+) -> SingleStoryRegenerateSuggestion:
+    """Menyempurnakan narasi User Story, Acceptance Criteria, Tech Notes, dan Test Cases menggunakan AI."""
+    prompt = f"""
+Kamu adalah Agile Product Owner & Technical Architect berpengalaman.
+Tugasmu adalah menyempurnakan atau membuatkan User Story profesional yang lengkap.
+
+Konteks Proyek: {project_name or 'Aplikasi Web/Mobile Modern'}
+Modul/Epic Terkait: {epic_name or 'Umum'}
+
+Draf User Story Saat Ini:
+- As a: {as_a or 'Pengguna'}
+- I want: {i_want or 'Melakukan sesuatu'}
+- So that: {so_that or 'Mendapatkan kemudahan'}
+
+Instruksi:
+1. Sempurnakan 'as_a', 'i_want', dan 'so_that' agar profesional, spesifik, dan sesuai standar Agile.
+2. Buatkan 3-5 Acceptance Criteria terukur dalam format 'Given..., When..., Then...'.
+3. Buatkan 3-5 Tech Notes arsitektur/backend/database yang relevan.
+4. Buatkan 2-4 Test Cases untuk QA.
+5. Tuliskan seluruh output dalam Bahasa Indonesia.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, SingleStoryRegenerateSuggestion, temperature=0.3)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate User Story dengan AI: {str(e)}") from e
