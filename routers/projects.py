@@ -6,6 +6,8 @@ import model
 import schemas
 import auth
 from database import get_db
+from services.token_tracker import record_token_usage
+from database import get_db
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
@@ -124,7 +126,7 @@ def delete_project(
     db: Session = Depends(get_db),
     current_user: model.User = Depends(auth.get_current_user)
 ):
-    """Menghapus project beserta relasi turunannya secara aman"""
+    """Menghapus project beserta relasi turunannya secara aman (Hanya Owner dan Editor yang diizinkan)"""
     project = db.query(model.Project).filter(model.Project.id == project_id).first()
     if not project:
         raise HTTPException(
@@ -132,15 +134,30 @@ def delete_project(
             detail="Project tidak ditemukan"
         )
 
-    # Validasi akses apakah user memiliki hak di workspace project ini (opsional jika sudah di-handle)
-    
-    # Hapus data tech_stack yang terikat secara manual untuk menghindari IntegrityError
+    # FIX: sebelumnya endpoint ini TIDAK memverifikasi bahwa current_user adalah
+    # anggota workspace project ini (apalagi punya role owner/editor). Artinya
+    # SIAPA SAJA yang login bisa menghapus project MANAPUN cuma dengan menebak
+    # project_id (IDOR). Sekarang wajib melalui check_workspace_access dulu,
+    # konsisten dengan update_project di atas.
+    check_workspace_access(
+        workspace_id=project.workspace_id,
+        user_id=current_user.id,
+        db=db,
+        required_roles=["owner", "editor"]
+    )
+
+    # Catatan: model.TechStack, model.UserType, model.Epic, model.NFR,
+    # model.UserJourney, model.AIRule, model.CodingGuideline, dan
+    # model.DevelopmentPlan semuanya sudah didefinisikan dengan
+    # cascade="all, delete-orphan" pada relasi Project, jadi baris delete
+    # manual untuk TechStack di bawah ini sebenarnya redundant -- tapi
+    # dibiarkan (tidak berbahaya) untuk menjaga kompatibilitas dengan
+    # kemungkinan data lama yang belum konsisten relasinya.
     db.query(model.TechStack).filter(model.TechStack.project_id == project_id).delete()
 
-    # Hapus project
     db.delete(project)
     db.commit()
-    
+
     return {"message": "Project berhasil dihapus"}
 
 @router.post("/suggest-description", response_model=schemas.SuggestDescriptionResponse)
@@ -162,13 +179,10 @@ def suggest_description(
 
     return schemas.SuggestDescriptionResponse(description=description)
 
-
-# TAMBAHAN: dipanggil tombol "AI Suggest" (ikon Sparkles) di step UserTypeGoals wizard.
-# Sebelumnya tombol ini cuma mengisi teks template statis, sekarang benar-benar
-# memanggil Gemini untuk menghasilkan goals & frustrations yang kontekstual.
 @router.post("/suggest-user-goals", response_model=schemas.SuggestUserGoalsResponse)
 def suggest_user_goals_endpoint(
     payload: schemas.SuggestUserGoalsRequest,
+    db: Session = Depends(get_db),
     current_user: model.User = Depends(auth.get_current_user)
 ):
     """Memanggil AI untuk memberikan saran goals & frustrations untuk satu tipe pengguna"""
@@ -178,6 +192,19 @@ def suggest_user_goals_endpoint(
             user_type_name=payload.user_type_name,
             user_type_description=payload.user_type_description or ""
         )
+
+        prompt_text = f"{payload.project_name} {payload.user_type_name} {payload.user_type_description or ''}"
+        response_text = f"{result.goals} {result.frustrations}"
+        record_token_usage(
+            db=db,
+            user_id=current_user.id,
+            provider="gemini",
+            model_name="gemini-2.0-flash",
+            feature="Persona Generation",
+            prompt_text=prompt_text,
+            response_text=response_text
+        )
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

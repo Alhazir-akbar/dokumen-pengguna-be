@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+from services.ai import suggest_story_refinement
 
 import model
 import schemas
@@ -34,13 +35,44 @@ def create_story(data: schemas.UserStoryCreate, db: Session = Depends(get_db), c
     return db_story
 
 @router.put("/{id}", response_model=schemas.UserStoryResponse)
-def update_story(id: int, data: schemas.UserStoryCreate, db: Session = Depends(get_db), current_user: model.User = Depends(auth.get_current_user)):
+def update_story(
+    id: int, 
+    data: schemas.UserStoryUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: model.User = Depends(auth.get_current_user)
+):
     db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
     if not db_story:
         raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
 
-    for key, value in data.model_dump().items():
-        setattr(db_story, key, value)
+    if data.as_a is not None:
+        db_story.as_a = data.as_a
+    if data.i_want is not None:
+        db_story.i_want = data.i_want
+    if data.so_that is not None:
+        db_story.so_that = data.so_that
+    if data.status is not None:
+        db_story.status = data.status
+    if data.code is not None:
+        db_story.code = data.code
+
+    # Sinkronisasi Acceptance Criteria ke tabel database
+    if data.acceptance_criteria is not None:
+        db.query(model.AcceptanceCriteria).filter(model.AcceptanceCriteria.user_story_id == id).delete()
+        for ac_desc in data.acceptance_criteria:
+            db.add(model.AcceptanceCriteria(user_story_id=id, description=ac_desc))
+
+    # Sinkronisasi Tech Notes ke tabel database
+    if data.tech_notes is not None:
+        db.query(model.TechNote).filter(model.TechNote.user_story_id == id).delete()
+        for note_content in data.tech_notes:
+            db.add(model.TechNote(user_story_id=id, content=note_content))
+
+    # Sinkronisasi Test Cases ke tabel database
+    if data.test_cases is not None:
+        db.query(model.TestCase).filter(model.TestCase.user_story_id == id).delete()
+        for tc_desc in data.test_cases:
+            db.add(model.TestCase(user_story_id=id, description=tc_desc))
 
     db.commit()
     db.refresh(db_story)
@@ -162,3 +194,28 @@ def save_wizard_stories_batch(
 
     db.commit()
     return {"message": "Semua data wizard berhasil disimpan ke database!"}
+# ================= TAMBAHAN: ENDPOINT AI REGENERATE USER STORY =================
+@router.post("/ai-suggest", response_model=schemas.StoryAiSuggestResponse)
+def ai_suggest_user_story(
+    data: schemas.StoryAiSuggestRequest,
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Menyempurnakan dan men-generate kelengkapan User Story menggunakan AI"""
+    try:
+        suggestion = suggest_story_refinement(
+            as_a=data.as_a or "",
+            i_want=data.i_want or "",
+            so_that=data.so_that or "",
+            epic_name=data.epic_name or "",
+            project_name=data.project_name or ""
+        )
+        return schemas.StoryAiSuggestResponse(
+            as_a=suggestion.as_a,
+            i_want=suggestion.i_want,
+            so_that=suggestion.so_that,
+            acceptance_criteria=suggestion.acceptance_criteria,
+            tech_notes=suggestion.tech_notes,
+            test_cases=suggestion.test_cases
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
