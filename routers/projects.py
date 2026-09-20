@@ -6,6 +6,8 @@ import model
 import schemas
 import auth
 from database import get_db
+from services.token_tracker import record_token_usage
+from database import get_db
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
@@ -180,6 +182,7 @@ def suggest_description(
 @router.post("/suggest-user-goals", response_model=schemas.SuggestUserGoalsResponse)
 def suggest_user_goals_endpoint(
     payload: schemas.SuggestUserGoalsRequest,
+    db: Session = Depends(get_db),
     current_user: model.User = Depends(auth.get_current_user)
 ):
     """Memanggil AI untuk memberikan saran goals & frustrations untuk satu tipe pengguna"""
@@ -189,6 +192,19 @@ def suggest_user_goals_endpoint(
             user_type_name=payload.user_type_name,
             user_type_description=payload.user_type_description or ""
         )
+
+        prompt_text = f"{payload.project_name} {payload.user_type_name} {payload.user_type_description or ''}"
+        response_text = f"{result.goals} {result.frustrations}"
+        record_token_usage(
+            db=db,
+            user_id=current_user.id,
+            provider="gemini",
+            model_name="gemini-2.0-flash",
+            feature="Persona Generation",
+            prompt_text=prompt_text,
+            response_text=response_text
+        )
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

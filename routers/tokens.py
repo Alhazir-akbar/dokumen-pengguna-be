@@ -19,30 +19,114 @@ def get_user_token_usage(
     db: Session = Depends(get_db),
     current_user: model.User = Depends(auth.get_current_user)
 ):
-    """Mengambil ringkasan kuota dan riwayat pemakaian token AI pengguna"""
+    """Mengambil ringkasan kuota dan riwayat pemakaian token AI pengguna terpisah per provider dan per hari"""
     
-    # Ambil awal bulan ini (UTC)
+    # Ambil awal hari ini dan awal bulan ini (UTC)
     now = datetime.now(timezone.utc)
+    start_of_day = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
     start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
-    # 1. Total token bulan ini
+    # 1. Total token bulan ini & hari ini (seluruh akun)
     monthly_used = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
         model.AiTokenUsage.user_id == current_user.id,
         model.AiTokenUsage.created_at >= start_of_month
     ).scalar() or 0
 
+    daily_used_total = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
+        model.AiTokenUsage.user_id == current_user.id,
+        model.AiTokenUsage.created_at >= start_of_day
+    ).scalar() or 0
+
     remaining = max(0, MONTHLY_DEFAULT_QUOTA - monthly_used)
     percentage = min(100.0, round((monthly_used / MONTHLY_DEFAULT_QUOTA) * 100, 1))
 
-    # 2. Breakdown per Provider
-    providers = ["gemini", "openrouter", "groq"]
+    # 2. Detail Konfigurasi & Pelacakan Terpisah per Provider AI
+    provider_configs = [
+        {
+            "name": "Google Gemini",
+            "provider_key": "gemini",
+            "model": os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+            "daily_limit": int(os.getenv("GEMINI_DAILY_LIMIT", "1000000")),
+            "monthly_limit": int(os.getenv("GEMINI_MONTHLY_LIMIT", "30000000")),
+            "status": "Ready" if os.getenv("GEMINI_API_KEY") else "Not Configured"
+        },
+        {
+            "name": "OpenRouter AI",
+            "provider_key": "openrouter",
+            "model": os.getenv("OPENROUTER_MODEL_NAME", "meta-llama/llama-3.3-70b-instruct:free"),
+            "daily_limit": int(os.getenv("OPENROUTER_DAILY_LIMIT", "200000")),
+            "monthly_limit": int(os.getenv("OPENROUTER_MONTHLY_LIMIT", "5000000")),
+            "status": "Ready" if os.getenv("OPENROUTER_API_KEY") else "Not Configured"
+        },
+        {
+            "name": "Groq Cloud LPU",
+            "provider_key": "groq",
+            "model": os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile"),
+            "daily_limit": int(os.getenv("GROQ_DAILY_LIMIT", "500000")),
+            "monthly_limit": int(os.getenv("GROQ_MONTHLY_LIMIT", "15000000")),
+            "status": "Ready" if os.getenv("GROQ_API_KEY") else "Not Configured"
+        }
+    ]
+
     usage_by_provider = {}
-    for p in providers:
-        toks = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
+    providers_info = []
+
+    for cfg in provider_configs:
+        pkey = cfg["provider_key"]
+        
+        # Penggunaan token hari ini per provider
+        p_daily_used = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
             model.AiTokenUsage.user_id == current_user.id,
-            model.AiTokenUsage.provider == p
+            model.AiTokenUsage.provider == pkey,
+            model.AiTokenUsage.created_at >= start_of_day
         ).scalar() or 0
-        usage_by_provider[p] = toks
+
+        # Penggunaan token bulan ini per provider
+        p_monthly_used = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
+            model.AiTokenUsage.user_id == current_user.id,
+            model.AiTokenUsage.provider == pkey,
+            model.AiTokenUsage.created_at >= start_of_month
+        ).scalar() or 0
+
+        # Total request per provider
+        p_req_today = db.query(func.count(model.AiTokenUsage.id)).filter(
+            model.AiTokenUsage.user_id == current_user.id,
+            model.AiTokenUsage.provider == pkey,
+            model.AiTokenUsage.created_at >= start_of_day
+        ).scalar() or 0
+
+        p_req_month = db.query(func.count(model.AiTokenUsage.id)).filter(
+            model.AiTokenUsage.user_id == current_user.id,
+            model.AiTokenUsage.provider == pkey,
+            model.AiTokenUsage.created_at >= start_of_month
+        ).scalar() or 0
+
+        usage_by_provider[pkey] = p_monthly_used
+
+        d_limit = cfg["daily_limit"]
+        d_rem = max(0, d_limit - p_daily_used)
+        d_pct = min(100.0, round((p_daily_used / d_limit) * 100, 2)) if d_limit > 0 else 0.0
+
+        m_limit = cfg["monthly_limit"]
+        m_rem = max(0, m_limit - p_monthly_used)
+        m_pct = min(100.0, round((p_monthly_used / m_limit) * 100, 2)) if m_limit > 0 else 0.0
+
+        providers_info.append({
+            "name": cfg["name"],
+            "provider_key": pkey,
+            "model": cfg["model"],
+            "status": cfg["status"],
+            "daily_limit": d_limit,
+            "daily_used": p_daily_used,
+            "daily_remaining": d_rem,
+            "daily_percentage": d_pct,
+            "monthly_limit": m_limit,
+            "monthly_used": p_monthly_used,
+            "monthly_remaining": m_rem,
+            "monthly_percentage": m_pct,
+            "requests_today": p_req_today,
+            "requests_month": p_req_month
+        })
 
     # 3. Breakdown per Fitur
     features_raw = db.query(
@@ -77,31 +161,10 @@ def get_user_token_usage(
         for r in recent_records
     ]
 
-    # 5. Informasi Provider Aktif dari Environment
-    providers_info = [
-        {
-            "name": "Google Gemini",
-            "provider_key": "gemini",
-            "model": os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
-            "status": "Ready" if os.getenv("GEMINI_API_KEY") else "Not Configured"
-        },
-        {
-            "name": "OpenRouter AI",
-            "provider_key": "openrouter",
-            "model": os.getenv("OPENROUTER_MODEL_NAME", "meta-llama/llama-3.3-70b-instruct:free"),
-            "status": "Ready" if os.getenv("OPENROUTER_API_KEY") else "Not Configured"
-        },
-        {
-            "name": "Groq Cloud LPU",
-            "provider_key": "groq",
-            "model": os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile"),
-            "status": "Ready" if os.getenv("GROQ_API_KEY") else "Not Configured"
-        }
-    ]
-
     return {
         "monthly_quota": MONTHLY_DEFAULT_QUOTA,
         "monthly_used": monthly_used,
+        "daily_used": daily_used_total,
         "remaining_tokens": remaining,
         "usage_percentage": percentage,
         "usage_by_provider": usage_by_provider,
