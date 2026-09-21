@@ -164,6 +164,19 @@ class UserTypeCreate(BaseModel):
     description: Optional[str] = None
     project_id: int
 
+# ================= TAMBAHAN: AI DRAFT USER TYPE =================
+
+class SuggestUserTypeDraftRequest(BaseModel):
+    project_name: str
+    project_description: Optional[str] = None
+    application_type: Optional[str] = None
+    domain_business: Optional[str] = None
+    existing_user_types: List[str] = []  # supaya AI tidak mengulang user type yang sudah ada
+
+class SuggestUserTypeDraftResponse(BaseModel):
+    name: str
+    description: str
+    
 class UserTypeResponse(BaseModel):
     id: int
     name: str
@@ -199,6 +212,28 @@ class AcceptanceCriteriaResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# ================= TAMBAHAN: AI DRAFT & AI SUGGEST/REFINE EPIC =================
+
+class SuggestEpicDraftRequest(BaseModel):
+    project_name: str
+    project_description: Optional[str] = None
+    application_type: Optional[str] = None
+    domain_business: Optional[str] = None
+    existing_epics: List[str] = []  # supaya AI tidak mengulang epic yang sudah ada
+
+class SuggestEpicDraftResponse(BaseModel):
+    title: str
+    description: str
+
+class SuggestEpicRefineRequest(BaseModel):
+    project_name: Optional[str] = None
+    title: str
+    description: Optional[str] = ""
+
+class SuggestEpicRefineResponse(BaseModel):
+    title: str
+    description: str
 
 # ================= TECH NOTES & TEST CASES =================
 
@@ -271,8 +306,27 @@ class NFRResponse(BaseModel):
 
     class Config:
         from_attributes = True
+# ================= TAMBAHAN: AI DRAFT & AI SUGGEST/REFINE NFR =================
 
-# ================= JOURNEYS =================
+class SuggestNFRDraftRequest(BaseModel):
+    project_name: str
+    project_description: Optional[str] = None
+    application_type: Optional[str] = None
+    domain_business: Optional[str] = None
+    existing_categories: List[str] = []  # supaya AI tidak mengulang kategori yang sudah ada
+
+class SuggestNFRDraftResponse(BaseModel):
+    category: str
+    description: str
+
+class SuggestNFRRefineRequest(BaseModel):
+    project_name: Optional[str] = None
+    category: str
+    description: Optional[str] = ""
+
+class SuggestNFRRefineResponse(BaseModel):
+    category: str
+    description: str
 
 # ================= JOURNEYS =================
 

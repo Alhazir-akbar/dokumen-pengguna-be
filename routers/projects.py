@@ -1,7 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from services.ai import ProjectRequirementsOutput, generate_project_requirements, suggest_project_description, suggest_user_goals, suggest_user_journey, suggest_user_type_description
+from services.ai import (
+    ProjectRequirementsOutput,
+    generate_project_requirements,
+    suggest_project_description,
+    suggest_user_goals,
+    suggest_user_journey,
+    suggest_user_type_description,
+    suggest_nfr_draft,
+    suggest_nfr_refinement,
+    suggest_epic_draft,
+    suggest_epic_refinement,
+    suggest_user_type_draft,
+)
 import model
 import schemas
 import auth
@@ -429,3 +441,110 @@ def suggest_user_type_description_endpoint(
         )
 
     return schemas.SuggestUserTypeDescriptionResponse(description=description)
+
+@router.post("/suggest-user-type-draft", response_model=schemas.SuggestUserTypeDraftResponse)
+def suggest_user_type_draft_endpoint(
+    payload: schemas.SuggestUserTypeDraftRequest,
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """AI Draft: menyarankan satu user type baru (name + description) yang belum ada di daftar."""
+    try:
+        result = suggest_user_type_draft(
+            project_name=payload.project_name,
+            project_description=payload.project_description or "",
+            application_type=payload.application_type or "",
+            domain_business=payload.domain_business or "",
+            existing_user_types=payload.existing_user_types,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI gagal membuat draf tipe pengguna: {str(e)}"
+        )
+
+    return schemas.SuggestUserTypeDraftResponse(name=result.name, description=result.description)
+
+@router.post("/suggest-nfr-draft", response_model=schemas.SuggestNFRDraftResponse)
+def suggest_nfr_draft_endpoint(
+    payload: schemas.SuggestNFRDraftRequest,
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """AI Draft: menyarankan satu NFR baru (kategori + deskripsi) yang belum ada di daftar."""
+    try:
+        result = suggest_nfr_draft(
+            project_name=payload.project_name,
+            project_description=payload.project_description or "",
+            application_type=payload.application_type or "",
+            domain_business=payload.domain_business or "",
+            existing_categories=payload.existing_categories,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI gagal membuat draf NFR: {str(e)}"
+        )
+
+    return schemas.SuggestNFRDraftResponse(category=result.category, description=result.description)
+
+@router.post("/suggest-nfr-refine", response_model=schemas.SuggestNFRRefineResponse)
+def suggest_nfr_refine_endpoint(
+    payload: schemas.SuggestNFRRefineRequest,
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """AI Suggest: menyempurnakan NFR yang sudah ada (dipakai saat mode edit)."""
+    try:
+        result = suggest_nfr_refinement(
+            category=payload.category,
+            description=payload.description or "",
+            project_name=payload.project_name or "",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI gagal menyempurnakan NFR: {str(e)}"
+        )
+
+    return schemas.SuggestNFRRefineResponse(category=result.category, description=result.description)
+
+@router.post("/suggest-epic-draft", response_model=schemas.SuggestEpicDraftResponse)
+def suggest_epic_draft_endpoint(
+    payload: schemas.SuggestEpicDraftRequest,
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """AI Draft: menyarankan satu epic baru (title + description) yang belum ada di daftar."""
+    try:
+        result = suggest_epic_draft(
+            project_name=payload.project_name,
+            project_description=payload.project_description or "",
+            application_type=payload.application_type or "",
+            domain_business=payload.domain_business or "",
+            existing_epics=payload.existing_epics,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI gagal membuat draf epic: {str(e)}"
+        )
+
+    return schemas.SuggestEpicDraftResponse(title=result.title, description=result.description)
+
+
+@router.post("/suggest-epic-refine", response_model=schemas.SuggestEpicRefineResponse)
+def suggest_epic_refine_endpoint(
+    payload: schemas.SuggestEpicRefineRequest,
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """AI Suggest: menyempurnakan epic yang sudah ada (dipakai saat mode edit)."""
+    try:
+        result = suggest_epic_refinement(
+            title=payload.title,
+            description=payload.description or "",
+            project_name=payload.project_name or "",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI gagal menyempurnakan epic: {str(e)}"
+        )
+
+    return schemas.SuggestEpicRefineResponse(title=result.title, description=result.description)

@@ -49,6 +49,61 @@ class UserTypeSuggestion(BaseModel):
         )
     )
 
+# ================= TAMBAHAN: AI DRAFT USER TYPE (dipakai UserTypes.tsx) =================
+
+class UserTypeDraftSuggestion(BaseModel):
+    name: str = Field(
+        description=(
+            "Nama satu tipe pengguna/persona yang relevan dan BELUM ada di daftar yang sudah "
+            "dibuat (misal: Guest User, Admin, Pembeli, Penjual)."
+        )
+    )
+    description: str = Field(
+        description=(
+            "Penjelasan singkat dan padat, MAKSIMAL 3 kalimat: siapa mereka, apa peran utama "
+            "mereka di aplikasi, dan tingkat akses mereka dibanding tipe user lain."
+        )
+    )
+
+
+def suggest_user_type_draft(
+    project_name: str,
+    project_description: str = "",
+    application_type: str = "",
+    domain_business: str = "",
+    existing_user_types: Optional[List[str]] = None,
+) -> UserTypeDraftSuggestion:
+    """AI Draft: menyarankan SATU user type baru (name + description) untuk ditambahkan,
+    dipakai tombol 'AI Draft' saat user klik 'Add user type' di step UserTypes."""
+    existing_user_types = existing_user_types or []
+    existing_line = (
+        ", ".join(existing_user_types) if existing_user_types else "Belum ada tipe pengguna yang ditambahkan."
+    )
+
+    prompt = f"""
+Kamu adalah Senior Business Analyst yang mengidentifikasi tipe pengguna (user type) untuk sebuah
+proyek software.
+
+Nama Proyek: {project_name}
+Deskripsi: {project_description or 'Tidak ada deskripsi.'}
+Tipe Aplikasi: {application_type or 'Tidak disebutkan'}
+Domain Bisnis: {domain_business or 'Tidak disebutkan'}
+
+Tipe pengguna yang SUDAH ada di proyek ini (JANGAN mengulang tipe ini, pilih tipe lain yang masih
+relevan dan belum tercakup): {existing_line}
+
+Tugasmu: sarankan SATU tipe pengguna baru yang paling penting untuk ditambahkan berikutnya, yang
+belum ada di daftar di atas. Deskripsi cukup singkat (maksimal 3 kalimat): siapa mereka, peran
+utama mereka, dan tingkat akses mereka dibanding tipe user lain.
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, UserTypeDraftSuggestion, temperature=0.5)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate draf tipe pengguna: {str(e)}") from e
+    
 class EpicSuggestion(BaseModel):
     name: str = Field(description="Kategori fitur besar/modul aplikasi (misal: Autentikasi, Katalog Produk)")
     description: str = Field(
@@ -62,6 +117,104 @@ class EpicSuggestion(BaseModel):
         )
     )
 
+# ================= TAMBAHAN: AI DRAFT & REFINE EPIC (dipakai EpicsList.tsx) =================
+
+class EpicDraftSuggestion(BaseModel):
+    title: str = Field(
+        description=(
+            "Nama satu Epic/modul fitur besar yang relevan dan BELUM ada di daftar epic yang "
+            "sudah dibuat (misal: Autentikasi, Katalog Produk, Manajemen Pesanan)."
+        )
+    )
+    description: str = Field(
+        description=(
+            "Deskripsi lengkap 4-6 kalimat mencakup: (1) tujuan bisnis epic ini, (2) daftar "
+            "konkret fitur/kemampuan utama di dalamnya (sebutkan nama fitur/layar spesifik), "
+            "(3) batasan cakupan eksplisit agar tidak tumpang tindih dengan epic lain, dan "
+            "(4) siapa saja user type yang berinteraksi dengan modul ini."
+        )
+    )
+
+
+class EpicRefineSuggestion(BaseModel):
+    title: str = Field(description="Judul epic, boleh sama atau sedikit dirapikan dari input")
+    description: str = Field(
+        description=(
+            "Versi deskripsi yang sudah disempurnakan: lebih detail dan konkret (fitur/layar "
+            "spesifik disebutkan, batasan cakupan jelas, user type terkait disebutkan). "
+            "Pertahankan maksud asli dari draf user, jangan ganti topiknya."
+        )
+    )
+
+
+def suggest_epic_draft(
+    project_name: str,
+    project_description: str = "",
+    application_type: str = "",
+    domain_business: str = "",
+    existing_epics: Optional[List[str]] = None,
+) -> EpicDraftSuggestion:
+    """AI Draft: menyarankan SATU epic baru (title + description) untuk ditambahkan,
+    dipakai tombol 'AI Draft' saat user klik 'Add epic' di step EpicsList."""
+    existing_epics = existing_epics or []
+    existing_line = (
+        ", ".join(existing_epics) if existing_epics else "Belum ada epic yang ditambahkan."
+    )
+
+    prompt = f"""
+Kamu adalah Senior Business Analyst dan Solutions Architect yang menyusun Epic (modul fitur besar)
+untuk sebuah proyek software.
+
+Nama Proyek: {project_name}
+Deskripsi: {project_description or 'Tidak ada deskripsi.'}
+Tipe Aplikasi: {application_type or 'Tidak disebutkan'}
+Domain Bisnis: {domain_business or 'Tidak disebutkan'}
+
+Epic yang SUDAH ada di proyek ini (JANGAN mengulang epic ini, pilih modul lain yang masih relevan
+dan belum tercakup): {existing_line}
+
+Tugasmu: sarankan SATU epic baru yang paling penting untuk ditambahkan berikutnya, yang belum ada
+di daftar di atas. Deskripsi harus detail dan konkret (sebutkan fitur/layar spesifik), punya
+batasan cakupan yang jelas, dan menyebutkan user type yang terkait.
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, EpicDraftSuggestion, temperature=0.5)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate draf epic: {str(e)}") from e
+
+
+def suggest_epic_refinement(
+    title: str,
+    description: str = "",
+    project_name: str = "",
+) -> EpicRefineSuggestion:
+    """AI Suggest/Refine: menyempurnakan epic yang SUDAH ada (title + description),
+    dipakai tombol 'AI Suggest' saat user mode edit epic di EpicsList."""
+    prompt = f"""
+Kamu adalah Senior Business Analyst dan Solutions Architect yang menyempurnakan Epic (modul fitur
+besar) untuk sebuah proyek software.
+
+Nama Proyek: {project_name or 'Tidak disebutkan'}
+Judul Epic: {title}
+Draf Deskripsi Saat Ini: {description or '(kosong, belum ditulis user)'}
+
+Tugasmu: sempurnakan deskripsi epic ini agar lebih detail dan konkret — sebutkan fitur/layar
+spesifik yang termasuk di dalamnya, batasan cakupan eksplisit (apa yang TIDAK termasuk supaya
+tidak tumpang tindih dengan epic lain), dan user type yang berinteraksi dengan modul ini. Jangan
+mengubah topik/maksud aslinya. Jika deskripsi saat ini kosong atau terlalu singkat, tulis dari
+awal berdasarkan judul yang diberikan.
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, EpicRefineSuggestion, temperature=0.4)
+    except Exception as e:
+        raise RuntimeError(f"Gagal menyempurnakan epic: {str(e)}") from e
+    
 class UserStorySuggestion(BaseModel):
     epic_name: str = Field(description="Nama Epic tempat story ini bernaung (harus cocok persis dengan salah satu nama Epic di atas)")
     story_name: str = Field(description="Judul singkat cerita pengguna (misal: Registrasi Akun, Cari Produk Berdasarkan Kategori)")
@@ -145,6 +298,100 @@ class ProjectRequirementsOutput(BaseModel):
     user_stories: List[UserStorySuggestion]
     nfrs: List[NFRSuggestion]
 
+# ================= TAMBAHAN: AI DRAFT & REFINE NFR (dipakai NonFunctionalList.tsx) =================
+
+class NFRDraftSuggestion(BaseModel):
+    category: str = Field(
+        description=(
+            "Satu kategori NFR yang relevan dan BELUM ada di daftar kategori yang sudah dipakai "
+            "(contoh: Performance, Security, Availability, Usability, Scalability, Compliance, "
+            "Maintainability, Compatibility, Data Integrity)."
+        )
+    )
+    description: str = Field(
+        description=(
+            "Detail kebutuhan non-fungsional dengan TARGET KUANTITATIF/TERUKUR yang jelas, "
+            "kontekstual terhadap proyek ini. Hindari deskripsi generik seperti 'harus cepat' "
+            "atau 'harus aman' tanpa angka/standar yang jelas."
+        )
+    )
+
+
+class NFRRefineSuggestion(BaseModel):
+    category: str = Field(description="Nama kategori NFR, boleh sama atau sedikit dirapikan dari input")
+    description: str = Field(
+        description=(
+            "Versi deskripsi yang sudah disempurnakan: lebih spesifik, terukur (ada target "
+            "kuantitatif), dan jelas cara verifikasinya. Pertahankan maksud asli dari draf user, "
+            "jangan ganti topiknya."
+        )
+    )
+
+def suggest_nfr_draft(
+    project_name: str,
+    project_description: str = "",
+    application_type: str = "",
+    domain_business: str = "",
+    existing_categories: Optional[List[str]] = None,
+) -> NFRDraftSuggestion:
+    """AI Draft: menyarankan SATU NFR baru (kategori + deskripsi) untuk ditambahkan,
+    dipakai tombol 'AI Draft' saat user klik 'Add requirement' di step NonFunctionalList."""
+    existing_categories = existing_categories or []
+    existing_line = (
+        ", ".join(existing_categories) if existing_categories else "Belum ada NFR yang ditambahkan."
+    )
+
+    prompt = f"""
+Kamu adalah Senior Business Analyst yang menyusun Non-Functional Requirements (NFR) untuk proyek software.
+
+Nama Proyek: {project_name}
+Deskripsi: {project_description or 'Tidak ada deskripsi.'}
+Tipe Aplikasi: {application_type or 'Tidak disebutkan'}
+Domain Bisnis: {domain_business or 'Tidak disebutkan'}
+
+Kategori NFR yang SUDAH ada di proyek ini (JANGAN mengulang kategori ini, pilih kategori lain yang
+masih relevan dan belum tercakup): {existing_line}
+
+Tugasmu: sarankan SATU NFR baru yang paling penting untuk ditambahkan berikutnya, dengan kategori
+yang belum ada di daftar di atas. Deskripsi harus punya target kuantitatif/terukur yang jelas dan
+kontekstual terhadap proyek ini.
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, NFRDraftSuggestion, temperature=0.5)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate draf NFR: {str(e)}") from e
+
+
+def suggest_nfr_refinement(
+    category: str,
+    description: str = "",
+    project_name: str = "",
+) -> NFRRefineSuggestion:
+    """AI Suggest/Refine: menyempurnakan NFR yang SUDAH ada (kategori + deskripsi),
+    dipakai tombol 'AI Suggest' saat user mode edit NFR di NonFunctionalList."""
+    prompt = f"""
+Kamu adalah Senior Business Analyst yang menyempurnakan Non-Functional Requirements (NFR) untuk
+proyek software.
+
+Nama Proyek: {project_name or 'Tidak disebutkan'}
+Kategori NFR: {category}
+Draf Deskripsi Saat Ini: {description or '(kosong, belum ditulis user)'}
+
+Tugasmu: sempurnakan deskripsi NFR ini agar lebih spesifik, jelas, dan TERUKUR (punya target
+kuantitatif/angka konkret serta cara verifikasinya), tanpa mengubah topik/maksud aslinya. Jika
+deskripsi saat ini kosong atau terlalu singkat, tulis dari awal berdasarkan kategori yang diberikan.
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, NFRRefineSuggestion, temperature=0.4)
+    except Exception as e:
+        raise RuntimeError(f"Gagal menyempurnakan NFR: {str(e)}") from e
+    
 # ================= TAMBAHAN: SARAN GOALS & FRUSTRATIONS PER USER TYPE =================
 
 class UserGoalsSuggestion(BaseModel):
