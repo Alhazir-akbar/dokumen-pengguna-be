@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from datetime import datetime
 
 import model
 import schemas
@@ -10,6 +11,7 @@ from database import get_db
 from services.ai import (
     suggest_tech_stack,
     suggest_guideline_by_category,
+    suggest_guideline_by_topic,
     suggest_dev_plan_for_epic,
     GUIDELINE_CATEGORY_LABELS,
 )
@@ -256,6 +258,36 @@ def generate_guideline(
     db.commit()
     db.refresh(guideline)
     return guideline
+
+
+@router.post("/{project_id}/guidelines/generate-custom", response_model=schemas.CodingGuidelineResponse)
+def generate_custom_guideline(
+    project_id: int,
+    data: schemas.GenerateCustomGuidelineRequest,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Generate draf coding guideline untuk judul/topik custom via AI tanpa menyimpan langsung ke DB."""
+    if not data.title or not data.title.strip():
+        raise HTTPException(status_code=400, detail="Judul guideline wajib diisi sebelum generate.")
+
+    project = _get_project_or_404(db, project_id)
+    tech_stack = db.query(model.TechStack).filter(model.TechStack.project_id == project_id).first()
+    summary = _tech_stack_summary(tech_stack) or (project.application_type or "")
+
+    try:
+        suggestion = suggest_guideline_by_topic(project.name, summary, data.title.strip())
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return schemas.CodingGuidelineResponse(
+        id=0,
+        project_id=project_id,
+        category=None,
+        title=suggestion.title,
+        content=suggestion.content,
+        created_at=datetime.now(),
+    )
 
 
 @router.post("/{project_id}/guidelines/generate-all", response_model=schemas.GenerateGuidelinesAllResponse)

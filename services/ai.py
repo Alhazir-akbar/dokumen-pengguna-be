@@ -1034,6 +1034,28 @@ Tulis dalam Bahasa Indonesia.
         raise RuntimeError(f"Gagal generate guideline kategori {label}: {str(e)}") from e
 
 
+def suggest_guideline_by_topic(project_name: str, tech_stack_summary: str, topic: str) -> GuidelineSuggestion:
+    """Menyarankan draf coding guideline untuk topik custom / bebas (misal: 'Penamaan Variabel',
+    'Unit Testing Standard', 'Error Handling Pattern')."""
+    prompt = f"""
+Kamu adalah Tech Lead berpengalaman yang menyusun coding guidelines untuk tim developer.
+
+Nama Proyek: {project_name}
+Tech Stack: {tech_stack_summary or 'Belum ditentukan, gunakan asumsi stack modern yang umum untuk aplikasi web.'}
+Topik Guideline: {topic}
+
+Tuliskan SATU guideline lengkap dan mendalam khusus mengenai topik "{topic}" untuk proyek ini. Isi harus konkret, actionable, dan spesifik terhadap tech stack di atas (dalam bentuk penjelasan best practice, aturan baku, atau poin-poin standar penulisan kode), bukan saran generik.
+
+Field "title" WAJIB: "{topic}"
+
+Tulis dalam Bahasa Indonesia.
+""".strip()
+    try:
+        return _generate_structured(prompt, GuidelineSuggestion, temperature=0.3)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate guideline untuk topik {topic}: {str(e)}") from e
+
+
 def suggest_coding_guidelines(project_name: str, tech_stack_summary: str) -> CodingGuidelinesSuggestion:
     """[LEGACY] Menyarankan draf coding guidelines bebas (5-7 item) berdasarkan tech stack.
     Dipertahankan untuk kompatibilitas, halaman Build sekarang memakai

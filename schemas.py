@@ -453,6 +453,9 @@ class CodingGuidelineResponse(BaseModel):
 class GenerateGuidelineRequest(BaseModel):
     category: str  # project_structure | security | frontend | backend | database
 
+class GenerateCustomGuidelineRequest(BaseModel):
+    title: str
+
 class GenerateGuidelinesAllResponse(BaseModel):
     guidelines: List[CodingGuidelineResponse]
     errors: List[str] = []
