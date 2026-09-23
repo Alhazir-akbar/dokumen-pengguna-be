@@ -11,34 +11,27 @@ from database import get_db
 
 router = APIRouter(prefix="/api/tokens", tags=["Token Usage"])
 
-MONTHLY_DEFAULT_QUOTA = 500_000  # Kuota 500.000 token per bulan per akun
-
 @router.get("/usage")
 def get_user_token_usage(
     project_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: model.User = Depends(auth.get_current_user)
 ):
-    """Mengambil ringkasan kuota dan riwayat pemakaian token AI pengguna terpisah per provider dan per hari"""
+    """Mengambil ringkasan kuota dan riwayat pemakaian token AI global (seluruh akun/server) terpisah per provider dan per hari"""
     
     # Ambil awal hari ini dan awal bulan ini (UTC)
     now = datetime.now(timezone.utc)
     start_of_day = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
     start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
-    # 1. Total token bulan ini & hari ini (seluruh akun)
+    # 1. Total token bulan ini & hari ini (gabungan seluruh akun / server-wide)
     monthly_used = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
-        model.AiTokenUsage.user_id == current_user.id,
         model.AiTokenUsage.created_at >= start_of_month
     ).scalar() or 0
 
     daily_used_total = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
-        model.AiTokenUsage.user_id == current_user.id,
         model.AiTokenUsage.created_at >= start_of_day
     ).scalar() or 0
-
-    remaining = max(0, MONTHLY_DEFAULT_QUOTA - monthly_used)
-    percentage = min(100.0, round((monthly_used / MONTHLY_DEFAULT_QUOTA) * 100, 1))
 
     # 2. Detail Konfigurasi & Pelacakan Terpisah per Provider AI
     provider_configs = [
@@ -68,35 +61,35 @@ def get_user_token_usage(
         }
     ]
 
+    total_monthly_quota = sum(cfg["monthly_limit"] for cfg in provider_configs)
+    remaining = max(0, total_monthly_quota - monthly_used)
+    percentage = min(100.0, round((monthly_used / total_monthly_quota) * 100, 1)) if total_monthly_quota > 0 else 0.0
+
     usage_by_provider = {}
     providers_info = []
 
     for cfg in provider_configs:
         pkey = cfg["provider_key"]
         
-        # Penggunaan token hari ini per provider
+        # Penggunaan token hari ini per provider (seluruh akun)
         p_daily_used = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
-            model.AiTokenUsage.user_id == current_user.id,
             model.AiTokenUsage.provider == pkey,
             model.AiTokenUsage.created_at >= start_of_day
         ).scalar() or 0
 
-        # Penggunaan token bulan ini per provider
+        # Penggunaan token bulan ini per provider (seluruh akun)
         p_monthly_used = db.query(func.sum(model.AiTokenUsage.total_tokens)).filter(
-            model.AiTokenUsage.user_id == current_user.id,
             model.AiTokenUsage.provider == pkey,
             model.AiTokenUsage.created_at >= start_of_month
         ).scalar() or 0
 
-        # Total request per provider
+        # Total request per provider (seluruh akun)
         p_req_today = db.query(func.count(model.AiTokenUsage.id)).filter(
-            model.AiTokenUsage.user_id == current_user.id,
             model.AiTokenUsage.provider == pkey,
             model.AiTokenUsage.created_at >= start_of_day
         ).scalar() or 0
 
         p_req_month = db.query(func.count(model.AiTokenUsage.id)).filter(
-            model.AiTokenUsage.user_id == current_user.id,
             model.AiTokenUsage.provider == pkey,
             model.AiTokenUsage.created_at >= start_of_month
         ).scalar() or 0
@@ -128,20 +121,16 @@ def get_user_token_usage(
             "requests_month": p_req_month
         })
 
-    # 3. Breakdown per Fitur
+    # 3. Breakdown per Fitur (seluruh akun)
     features_raw = db.query(
         model.AiTokenUsage.feature,
         func.sum(model.AiTokenUsage.total_tokens)
-    ).filter(
-        model.AiTokenUsage.user_id == current_user.id
     ).group_by(model.AiTokenUsage.feature).all()
     
     usage_by_feature = {f: toks for f, toks in features_raw}
 
-    # 4. Riwayat 15 request terakhir
-    recent_query = db.query(model.AiTokenUsage).filter(
-        model.AiTokenUsage.user_id == current_user.id
-    )
+    # 4. Riwayat 15 request terakhir (seluruh akun)
+    recent_query = db.query(model.AiTokenUsage)
     if project_id:
         recent_query = recent_query.filter(model.AiTokenUsage.project_id == project_id)
     
@@ -162,7 +151,7 @@ def get_user_token_usage(
     ]
 
     return {
-        "monthly_quota": MONTHLY_DEFAULT_QUOTA,
+        "monthly_quota": total_monthly_quota,
         "monthly_used": monthly_used,
         "daily_used": daily_used_total,
         "remaining_tokens": remaining,
