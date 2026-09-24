@@ -207,7 +207,7 @@ class AcceptanceCriteriaCreate(BaseModel):
 
 class AcceptanceCriteriaResponse(BaseModel):
     id: int
-    description: str
+    description: Optional[str] = ""
     user_story_id: int
 
     class Config:
@@ -251,7 +251,7 @@ class TestCaseResponse(TestCaseBase):
 
 class TechNoteResponse(BaseModel):
     id: int
-    content: str
+    content: Optional[str] = ""
     user_story_id: int
 
     class Config:
@@ -279,10 +279,9 @@ class UserStoryUpdate(BaseModel):
     i_want: Optional[str] = None
     so_that: Optional[str] = None
     status: Optional[str] = None
-    code: Optional[str] = None
-    acceptance_criteria: Optional[List[str]] = None
-    tech_notes: Optional[List[str]] = None
-    test_cases: Optional[List[TestCaseCreate]] = None  # 
+    acceptance_criteria: Optional[List[Optional[str]]] = None
+    tech_notes: Optional[List[Optional[str]]] = None
+    test_cases: Optional[List[TestCaseCreate]] = None
     
 class UserStoryCreate(BaseModel):
     epic_id: int
@@ -300,11 +299,11 @@ class UserStoryResponse(BaseModel):
     user_type_id: Optional[int] = None
     code: Optional[str] = None
     as_a: Optional[str] = None
-    i_want: str
+    i_want: Optional[str] = ""
     so_that: Optional[str] = None
-    status: str
+    status: Optional[str] = "draft"
     project_id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
     acceptance_criteria: List[AcceptanceCriteriaResponse] = []
     tech_notes: List[TechNoteResponse] = []
     test_cases: List[TestCaseResponse] = []

@@ -66,23 +66,26 @@ def update_story(
     if data.acceptance_criteria is not None:
         db.query(model.AcceptanceCriteria).filter(model.AcceptanceCriteria.user_story_id == id).delete()
         for ac_desc in data.acceptance_criteria:
-            db.add(model.AcceptanceCriteria(user_story_id=id, description=ac_desc))
+            if ac_desc and str(ac_desc).strip():
+                db.add(model.AcceptanceCriteria(user_story_id=id, description=str(ac_desc).strip()))
 
     # Sinkronisasi Tech Notes ke tabel database
     if data.tech_notes is not None:
         db.query(model.TechNote).filter(model.TechNote.user_story_id == id).delete()
         for note_content in data.tech_notes:
-            db.add(model.TechNote(user_story_id=id, content=note_content))
+            if note_content and str(note_content).strip():
+                db.add(model.TechNote(user_story_id=id, content=str(note_content).strip()))
 
-        # Sinkronisasi Test Cases ke tabel database
+    # Sinkronisasi Test Cases ke tabel database
     if data.test_cases is not None:
         db.query(model.TestCase).filter(model.TestCase.user_story_id == id).delete()
         for tc in data.test_cases:
-            db.add(model.TestCase(
-                user_story_id=id,
-                action=tc.action,
-                expected_result=tc.expected_result,
-            ))
+            if tc:
+                db.add(model.TestCase(
+                    user_story_id=id,
+                    action=tc.action if hasattr(tc, 'action') else getattr(tc, 'description', str(tc)),
+                    expected_result=tc.expected_result if hasattr(tc, 'expected_result') else "",
+                ))
 
     db.commit()
     db.refresh(db_story)
