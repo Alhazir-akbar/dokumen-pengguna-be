@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import datetime
+import json
 
 # AUTHENTICATION DAN USER
 
@@ -271,6 +272,43 @@ class StoryImageResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class CommentCreate(BaseModel):
+    content: str
+
+class CommentUserInfo(BaseModel):
+    id: int
+    username: str
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class CommentResponse(BaseModel):
+    id: int
+    user_story_id: int
+    content: str
+    created_at: datetime
+    user: CommentUserInfo
+
+    class Config:
+        from_attributes = True
+
+class StoryLinkCreate(BaseModel):
+    target_story_id: int
+    link_type: str  # "relates_to" | "blocked_by"
+
+class LinkedStoryItem(BaseModel):
+    link_id: int
+    story_id: int
+    code: Optional[str] = None
+    i_want: str
+    link_type: str
+
+class StoryLinksResponse(BaseModel):
+    linked_to: List[LinkedStoryItem] = []
+    linked_from: List[LinkedStoryItem] = []
+
 class UserStoryUpdate(BaseModel):
     epic_id: Optional[int] = None
     user_type_id: Optional[int] = None
@@ -282,6 +320,7 @@ class UserStoryUpdate(BaseModel):
     acceptance_criteria: Optional[List[Optional[str]]] = None
     tech_notes: Optional[List[Optional[str]]] = None
     test_cases: Optional[List[TestCaseCreate]] = None
+    labels: Optional[List[str]] = None
     
 class UserStoryCreate(BaseModel):
     epic_id: int
@@ -299,16 +338,29 @@ class UserStoryResponse(BaseModel):
     user_type_id: Optional[int] = None
     code: Optional[str] = None
     as_a: Optional[str] = None
-    i_want: Optional[str] = ""
+    i_want: str
     so_that: Optional[str] = None
-    status: Optional[str] = "draft"
+    status: str
     project_id: int
-    created_at: Optional[datetime] = None
+    created_at: datetime
     acceptance_criteria: List[AcceptanceCriteriaResponse] = []
     tech_notes: List[TechNoteResponse] = []
     test_cases: List[TestCaseResponse] = []
     images: List[StoryImageResponse] = []
-    
+    labels: List[str] = []
+
+    @field_validator('labels', mode='before')
+    @classmethod
+    def parse_labels(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (TypeError, ValueError):
+                return []
+        return v
+
     class Config:
         from_attributes = True
 

@@ -142,7 +142,6 @@ class EpicRefineSuggestion(BaseModel):
         )
     )
 
-
 def suggest_epic_draft(
     project_name: str,
     project_description: str = "",
@@ -1145,7 +1144,73 @@ class SingleStoryRegenerateSuggestion(BaseModel):
         description="2-4 skenario pengujian untuk tim QA (contoh: 'Validasi form submit tanpa field wajib')"
     )
 
+# ================= TAMBAHAN: SARAN LINKED STORIES (per-story) =================
 
+class StoryLinkSuggestionItem(BaseModel):
+    target_code: str = Field(
+        description="Kode story tujuan yang berkaitan (HARUS persis sama dengan salah satu kode di daftar story lain yang diberikan)"
+    )
+    link_type: str = Field(
+        description="Tipe hubungan: 'relates_to' jika sekadar berkaitan topik/fitur, atau 'blocked_by' jika story ini tidak bisa/tidak masuk akal dikerjakan sebelum story tujuan selesai"
+    )
+
+
+class StoryLinkSuggestionsOutput(BaseModel):
+    links: List[StoryLinkSuggestionItem] = Field(
+        description=(
+            "Daftar link yang relevan dari story yang sedang dianalisis ke story lain. Kosongkan "
+            "(array kosong) jika tidak ada hubungan yang jelas -- jangan memaksakan hubungan yang "
+            "lemah atau terlalu umum."
+        )
+    )
+
+
+def suggest_story_links(
+    source_code: str,
+    source_as_a: str,
+    source_i_want: str,
+    source_so_that: str,
+    other_stories: List[dict],  # [{"code": str, "as_a": str, "i_want": str, "so_that": str}, ...]
+) -> StoryLinkSuggestionsOutput:
+    """Menganalisis satu story terhadap semua story lain dalam project yang sama, dan menyarankan
+    link (relates_to / blocked_by) yang relevan. Dipakai tombol 'Generate with AI' di sidebar
+    Stories Linked To pada ManualStoryDetailPanel."""
+    if not other_stories:
+        return StoryLinkSuggestionsOutput(links=[])
+
+    others_lines = "\n".join(
+        f"- {s['code']}: As a {s.get('as_a') or 'User'}, I want {s.get('i_want')}, so that {s.get('so_that') or '-'}"
+        for s in other_stories
+    )
+
+    prompt = f"""
+Kamu adalah Business Analyst yang menganalisis keterkaitan antar User Story dalam satu proyek software.
+
+STORY YANG SEDANG DIANALISIS:
+Kode: {source_code}
+As a: {source_as_a or 'User'}
+I want: {source_i_want}
+So that: {source_so_that or '-'}
+
+DAFTAR STORY LAIN DALAM PROYEK YANG SAMA:
+{others_lines}
+
+Tugasmu: identifikasi story lain di atas yang punya keterkaitan JELAS dengan story yang sedang
+dianalisis. Untuk setiap keterkaitan yang kamu temukan, tentukan tipenya:
+- "relates_to": story saling berkaitan topik/alur fitur, tapi TIDAK saling bergantung urutan pengerjaannya.
+- "blocked_by": story yang sedang dianalisis TIDAK BISA/tidak masuk akal dikerjakan SEBELUM story
+  tujuan selesai (ada dependency nyata, misal butuh data/state dari story lain terlebih dahulu).
+
+Field target_code HARUS PERSIS SAMA dengan salah satu kode di daftar di atas. Jangan membuat
+hubungan yang dipaksakan atau terlalu umum -- kalau memang tidak ada story yang benar-benar
+berkaitan, kembalikan array kosong.
+""".strip()
+
+    try:
+        return _generate_structured(prompt, StoryLinkSuggestionsOutput, temperature=0.3)
+    except Exception as e:
+        raise RuntimeError(f"Gagal generate saran story links: {str(e)}") from e
+    
 def suggest_story_refinement(
     as_a: str = "",
     i_want: str = "",

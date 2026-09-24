@@ -144,7 +144,11 @@ class UserStory(Base):
     tech_notes = relationship("TechNote", back_populates="user_story", cascade="all, delete-orphan")
     test_cases = relationship("TestCase", back_populates="user_story", cascade="all, delete-orphan")
     images = relationship("StoryImage", back_populates="user_story", cascade="all, delete-orphan")
-    
+    comments = relationship("Comment", back_populates="user_story", cascade="all, delete-orphan")
+    labels = Column(String, nullable=True)  # JSON-encoded list, e.g. '["Frontend","MVP"]'
+    links_from = relationship("StoryLink", foreign_keys="StoryLink.source_story_id", back_populates="source_story", cascade="all, delete-orphan")
+    links_to = relationship("StoryLink", foreign_keys="StoryLink.target_story_id", back_populates="target_story", cascade="all, delete-orphan")
+
 class AcceptanceCriteria(Base):
     __tablename__ = "acceptance_criteria"
     id = Column(Integer, primary_key=True, index=True)
@@ -180,6 +184,30 @@ class StoryImage(Base):
 
     user_story = relationship("UserStory", back_populates="images")
 
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user_story = relationship("UserStory", back_populates="comments")
+    user = relationship("User")
+
+class StoryLink(Base):
+    __tablename__ = "story_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
+    target_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
+    link_type = Column(String, nullable=False)  # "relates_to" | "blocked_by"
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    source_story = relationship("UserStory", foreign_keys=[source_story_id], back_populates="links_from")
+    target_story = relationship("UserStory", foreign_keys=[target_story_id], back_populates="links_to")
+    
 class NFR(Base):
     __tablename__ = "nfrs"
     id = Column(Integer, primary_key=True, index=True)

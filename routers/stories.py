@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from services.ai import suggest_story_refinement, suggest_epic_draft, suggest_nfr_draft
-
+from services.ai import suggest_story_refinement, suggest_epic_draft, suggest_nfr_draft, suggest_story_links
+import json
 import model
 import schemas
 import auth
@@ -86,7 +86,9 @@ def update_story(
                     action=tc.action if hasattr(tc, 'action') else getattr(tc, 'description', str(tc)),
                     expected_result=tc.expected_result if hasattr(tc, 'expected_result') else "",
                 ))
-
+    if data.labels is not None:
+        db_story.labels = json.dumps(data.labels)
+                
     db.commit()
     db.refresh(db_story)
     return db_story
@@ -378,3 +380,220 @@ def delete_story_image(
     db.delete(db_image)
     db.commit()
     return {"message": "Gambar berhasil dihapus"}
+
+# ================= TAMBAHAN: COMMENTS & DISKUSI TIM =================
+
+@router.get("/{id}/comments", response_model=List[schemas.CommentResponse])
+def get_story_comments(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
+    if not db_story:
+        raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
+
+    return (
+        db.query(model.Comment)
+        .filter(model.Comment.user_story_id == id)
+        .order_by(model.Comment.created_at.asc())
+        .all()
+    )
+
+
+@router.post("/{id}/comments", response_model=schemas.CommentResponse, status_code=status.HTTP_201_CREATED)
+def create_story_comment(
+    id: int,
+    data: schemas.CommentCreate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
+    if not db_story:
+        raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
+
+    if not data.content.strip():
+        raise HTTPException(status_code=400, detail="Komentar tidak boleh kosong")
+
+    db_comment = model.Comment(
+        user_story_id=id,
+        user_id=current_user.id,
+        content=data.content.strip(),
+    )
+    db.add(db_comment)
+    db.commit()
+    db.refresh(db_comment)
+    return db_comment
+
+# ================= TAMBAHAN: LABELS & LINKED STORIES =================
+
+@router.get("/{id}/links", response_model=schemas.StoryLinksResponse)
+def get_story_links(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
+    if not db_story:
+        raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
+
+    links_from = db.query(model.StoryLink).filter(model.StoryLink.source_story_id == id).all()
+    links_to = db.query(model.StoryLink).filter(model.StoryLink.target_story_id == id).all()
+
+    linked_to = [
+        schemas.LinkedStoryItem(
+            link_id=l.id,
+            story_id=l.target_story.id,
+            code=l.target_story.code,
+            i_want=l.target_story.i_want,
+            link_type=l.link_type,
+        )
+        for l in links_from
+    ]
+    linked_from = [
+        schemas.LinkedStoryItem(
+            link_id=l.id,
+            story_id=l.source_story.id,
+            code=l.source_story.code,
+            i_want=l.source_story.i_want,
+            link_type=l.link_type,
+        )
+        for l in links_to
+    ]
+    return schemas.StoryLinksResponse(linked_to=linked_to, linked_from=linked_from)
+
+
+@router.post("/{id}/links", response_model=schemas.LinkedStoryItem, status_code=status.HTTP_201_CREATED)
+def create_story_link(
+    id: int,
+    data: schemas.StoryLinkCreate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    if data.target_story_id == id:
+        raise HTTPException(status_code=400, detail="Story tidak bisa di-link ke dirinya sendiri")
+
+    if data.link_type not in ("relates_to", "blocked_by"):
+        raise HTTPException(status_code=400, detail="link_type harus 'relates_to' atau 'blocked_by'")
+
+    db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
+    if not db_story:
+        raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
+
+    target_story = db.query(model.UserStory).filter(model.UserStory.id == data.target_story_id).first()
+    if not target_story:
+        raise HTTPException(status_code=404, detail="Target story tidak ditemukan")
+
+    db_link = model.StoryLink(
+        source_story_id=id,
+        target_story_id=data.target_story_id,
+        link_type=data.link_type,
+    )
+    db.add(db_link)
+    db.commit()
+    db.refresh(db_link)
+
+    return schemas.LinkedStoryItem(
+        link_id=db_link.id,
+        story_id=target_story.id,
+        code=target_story.code,
+        i_want=target_story.i_want,
+        link_type=db_link.link_type,
+    )
+
+
+@router.delete("/links/{link_id}")
+def delete_story_link(
+    link_id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_link = db.query(model.StoryLink).filter(model.StoryLink.id == link_id).first()
+    if not db_link:
+        raise HTTPException(status_code=404, detail="Link tidak ditemukan")
+
+    db.delete(db_link)
+    db.commit()
+    return {"message": "Link berhasil dihapus"}
+
+# ================= TAMBAHAN: GENERATE LINKS DENGAN AI =================
+
+@router.post("/{id}/links/generate", response_model=schemas.StoryLinksResponse)
+def generate_story_links_ai(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
+    if not db_story:
+        raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
+
+    other_stories = db.query(model.UserStory).filter(
+        model.UserStory.project_id == db_story.project_id,
+        model.UserStory.id != id,
+    ).all()
+
+    if not other_stories:
+        raise HTTPException(status_code=400, detail="Tidak ada story lain dalam project ini untuk di-link")
+
+    # Pakai fallback kode berbasis ID kalau story belum punya `code` di database,
+    # supaya story lama yang belum punya kode tetap ikut dianalisis AI.
+    def story_code(s):
+        return s.code or f"US-{s.id}"
+
+    others_payload = [
+        {"code": story_code(s), "as_a": s.as_a, "i_want": s.i_want, "so_that": s.so_that}
+        for s in other_stories
+    ]
+
+    try:
+        suggestion = suggest_story_links(
+            source_code=story_code(db_story),
+            source_as_a=db_story.as_a,
+            source_i_want=db_story.i_want,
+            source_so_that=db_story.so_that,
+            other_stories=others_payload,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    # Mapping pakai kode yang sama (fallback ID) supaya cocok dengan yang dikirim ke AI
+    code_to_story = {story_code(s): s for s in other_stories}
+
+    for item in suggestion.links:
+        target = code_to_story.get(item.target_code)
+        if not target or item.link_type not in ("relates_to", "blocked_by"):
+            continue
+
+        exists = db.query(model.StoryLink).filter(
+            model.StoryLink.source_story_id == id,
+            model.StoryLink.target_story_id == target.id,
+            model.StoryLink.link_type == item.link_type,
+        ).first()
+        if exists:
+            continue
+
+        db.add(model.StoryLink(
+            source_story_id=id,
+            target_story_id=target.id,
+            link_type=item.link_type,
+        ))
+
+    db.commit()
+
+    links_from = db.query(model.StoryLink).filter(model.StoryLink.source_story_id == id).all()
+    links_to = db.query(model.StoryLink).filter(model.StoryLink.target_story_id == id).all()
+
+    linked_to = [
+        schemas.LinkedStoryItem(
+            link_id=l.id, story_id=l.target_story.id, code=l.target_story.code,
+            i_want=l.target_story.i_want, link_type=l.link_type,
+        ) for l in links_from
+    ]
+    linked_from = [
+        schemas.LinkedStoryItem(
+            link_id=l.id, story_id=l.source_story.id, code=l.source_story.code,
+            i_want=l.source_story.i_want, link_type=l.link_type,
+        ) for l in links_to
+    ]
+    return schemas.StoryLinksResponse(linked_to=linked_to, linked_from=linked_from)
