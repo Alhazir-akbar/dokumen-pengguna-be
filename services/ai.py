@@ -16,7 +16,6 @@ load_dotenv()
 T = TypeVar("T", bound=BaseModel)
 
 # ================= SKEMA OUTPUT TERSTRUKTUR UNTUK AI =================
-
 class PersonaSuggestion(BaseModel):
     name: str = Field(description="Nama lengkap persona fiktif yang representatif (misal: Sarah Wijaya)")
     age: int = Field(description="Usia persona yang masuk akal untuk tipe pengguna ini")
@@ -50,7 +49,6 @@ class UserTypeSuggestion(BaseModel):
     )
 
 # ================= TAMBAHAN: AI DRAFT USER TYPE (dipakai UserTypes.tsx) =================
-
 class UserTypeDraftSuggestion(BaseModel):
     name: str = Field(
         description=(
@@ -64,7 +62,6 @@ class UserTypeDraftSuggestion(BaseModel):
             "mereka di aplikasi, dan tingkat akses mereka dibanding tipe user lain."
         )
     )
-
 
 def suggest_user_type_draft(
     project_name: str,
@@ -118,7 +115,6 @@ class EpicSuggestion(BaseModel):
     )
 
 # ================= TAMBAHAN: AI DRAFT & REFINE EPIC (dipakai EpicsList.tsx) =================
-
 class EpicDraftSuggestion(BaseModel):
     title: str = Field(
         description=(

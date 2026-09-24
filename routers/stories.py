@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from services.ai import suggest_story_refinement
+from services.ai import suggest_story_refinement, suggest_epic_draft, suggest_nfr_draft
 
 import model
 import schemas
 import auth
 from database import get_db
+import os
+import shutil
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 
 router = APIRouter(prefix="/api/stories", tags=["Epics & User Stories"])
+UPLOAD_DIR = "static/story_images"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.get("/epics", response_model=List[schemas.EpicResponse])
 def get_epics(project_id: int, db: Session = Depends(get_db), current_user: model.User = Depends(auth.get_current_user)):
@@ -68,11 +74,15 @@ def update_story(
         for note_content in data.tech_notes:
             db.add(model.TechNote(user_story_id=id, content=note_content))
 
-    # Sinkronisasi Test Cases ke tabel database
+        # Sinkronisasi Test Cases ke tabel database
     if data.test_cases is not None:
         db.query(model.TestCase).filter(model.TestCase.user_story_id == id).delete()
-        for tc_desc in data.test_cases:
-            db.add(model.TestCase(user_story_id=id, description=tc_desc))
+        for tc in data.test_cases:
+            db.add(model.TestCase(
+                user_story_id=id,
+                action=tc.action,
+                expected_result=tc.expected_result,
+            ))
 
     db.commit()
     db.refresh(db_story)
@@ -194,6 +204,7 @@ def save_wizard_stories_batch(
 
     db.commit()
     return {"message": "Semua data wizard berhasil disimpan ke database!"}
+
 # ================= TAMBAHAN: ENDPOINT AI REGENERATE USER STORY =================
 @router.post("/ai-suggest", response_model=schemas.StoryAiSuggestResponse)
 def ai_suggest_user_story(
@@ -219,3 +230,148 @@ def ai_suggest_user_story(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ================= NON-FUNCTIONAL REQUIREMENTS (NFR) =================
+
+@router.get("/nfrs", response_model=List[schemas.NFRResponse])
+def get_nfrs(project_id: int, db: Session = Depends(get_db), current_user: model.User = Depends(auth.get_current_user)):
+    return db.query(model.NFR).filter(model.NFR.project_id == project_id).all()
+
+@router.post("/nfrs", response_model=schemas.NFRResponse, status_code=status.HTTP_201_CREATED)
+def create_nfr(data: schemas.NFRCreate, db: Session = Depends(get_db), current_user: model.User = Depends(auth.get_current_user)):
+    db_nfr = model.NFR(category=data.category, description=data.description, project_id=data.project_id)
+    db.add(db_nfr)
+    db.commit()
+    db.refresh(db_nfr)
+    return db_nfr
+
+@router.put("/nfrs/{id}", response_model=schemas.NFRResponse)
+def update_nfr(
+    id: int,
+    data: schemas.NFRCreate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_nfr = db.query(model.NFR).filter(model.NFR.id == id).first()
+    if not db_nfr:
+        raise HTTPException(status_code=404, detail="NFR tidak ditemukan")
+    db_nfr.category = data.category
+    db_nfr.description = data.description
+    db.commit()
+    db.refresh(db_nfr)
+    return db_nfr
+
+@router.delete("/nfrs/{id}")
+def delete_nfr(id: int, db: Session = Depends(get_db), current_user: model.User = Depends(auth.get_current_user)):
+    db_nfr = db.query(model.NFR).filter(model.NFR.id == id).first()
+    if not db_nfr:
+        raise HTTPException(status_code=404, detail="NFR tidak ditemukan")
+    db.delete(db_nfr)
+    db.commit()
+    return {"message": "NFR berhasil dihapus"}
+
+
+# ================= AI-SUGGEST: EPIC & NFR =================
+
+@router.post("/epics/ai-suggest", response_model=schemas.SuggestEpicDraftResponse)
+def ai_suggest_epic(
+    data: schemas.SuggestEpicDraftRequest,
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    try:
+        suggestion = suggest_epic_draft(
+            project_name=data.project_name,
+            project_description=data.project_description or "",
+            application_type=data.application_type or "",
+            domain_business=data.domain_business or "",
+            existing_epics=data.existing_epics,
+        )
+        return schemas.SuggestEpicDraftResponse(title=suggestion.title, description=suggestion.description)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/nfrs/ai-suggest", response_model=schemas.SuggestNFRDraftResponse)
+def ai_suggest_nfr(
+    data: schemas.SuggestNFRDraftRequest,
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    try:
+        suggestion = suggest_nfr_draft(
+            project_name=data.project_name,
+            project_description=data.project_description or "",
+            application_type=data.application_type or "",
+            domain_business=data.domain_business or "",
+            existing_categories=data.existing_categories,
+        )
+        return schemas.SuggestNFRDraftResponse(category=suggestion.category, description=suggestion.description)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ================= TAMBAHAN: STORY IMAGES / WIREFRAMES =================
+
+@router.post("/{id}/images/upload", response_model=schemas.StoryImageResponse, status_code=status.HTTP_201_CREATED)
+def upload_story_image(
+    id: int,
+    file: UploadFile = File(...),
+    caption: str = Form(None),
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Upload file gambar lokal untuk sebuah User Story."""
+    db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
+    if not db_story:
+        raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
+
+    ext = os.path.splitext(file.filename or "")[1]
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    image_url = f"/static/story_images/{filename}"
+    db_image = model.StoryImage(user_story_id=id, url=image_url, caption=caption)
+    db.add(db_image)
+    db.commit()
+    db.refresh(db_image)
+    return db_image
+
+
+@router.post("/{id}/images", response_model=schemas.StoryImageResponse, status_code=status.HTTP_201_CREATED)
+def add_story_image_url(
+    id: int,
+    data: schemas.StoryImageCreate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    """Tambah gambar via URL eksternal (bukan upload file)."""
+    db_story = db.query(model.UserStory).filter(model.UserStory.id == id).first()
+    if not db_story:
+        raise HTTPException(status_code=404, detail="User Story tidak ditemukan")
+
+    db_image = model.StoryImage(user_story_id=id, url=data.url, caption=data.caption)
+    db.add(db_image)
+    db.commit()
+    db.refresh(db_image)
+    return db_image
+
+
+@router.delete("/images/{image_id}")
+def delete_story_image(
+    image_id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_image = db.query(model.StoryImage).filter(model.StoryImage.id == image_id).first()
+    if not db_image:
+        raise HTTPException(status_code=404, detail="Gambar tidak ditemukan")
+
+    # Hapus file fisik dari disk kalau itu file upload lokal (bukan URL eksternal)
+    if db_image.url.startswith("/static/"):
+        filepath = db_image.url.lstrip("/")
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+    db.delete(db_image)
+    db.commit()
+    return {"message": "Gambar berhasil dihapus"}

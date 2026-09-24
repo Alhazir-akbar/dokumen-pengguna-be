@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime, timezone
@@ -143,7 +143,8 @@ class UserStory(Base):
     acceptance_criteria = relationship("AcceptanceCriteria", back_populates="user_story", cascade="all, delete-orphan")
     tech_notes = relationship("TechNote", back_populates="user_story", cascade="all, delete-orphan")
     test_cases = relationship("TestCase", back_populates="user_story", cascade="all, delete-orphan")
-
+    images = relationship("StoryImage", back_populates="user_story", cascade="all, delete-orphan")
+    
 class AcceptanceCriteria(Base):
     __tablename__ = "acceptance_criteria"
     id = Column(Integer, primary_key=True, index=True)
@@ -160,10 +161,24 @@ class TechNote(Base):
 
 class TestCase(Base):
     __tablename__ = "test_cases"
+
     id = Column(Integer, primary_key=True, index=True)
     user_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
-    description = Column(String, nullable=False)
+    action = Column(Text, nullable=False, default="")
+    expected_result = Column(Text, nullable=False, default="")
+
     user_story = relationship("UserStory", back_populates="test_cases")
+
+class StoryImage(Base):
+    __tablename__ = "story_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_story_id = Column(Integer, ForeignKey("user_stories.id"), nullable=False)
+    url = Column(String, nullable=False)
+    caption = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user_story = relationship("UserStory", back_populates="images")
 
 class NFR(Base):
     __tablename__ = "nfrs"

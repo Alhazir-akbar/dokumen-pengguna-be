@@ -236,6 +236,18 @@ class SuggestEpicRefineResponse(BaseModel):
     description: str
 
 # ================= TECH NOTES & TEST CASES =================
+class TestCaseBase(BaseModel):
+    action: str
+    expected_result: str
+
+class TestCaseCreate(TestCaseBase):
+    pass
+
+class TestCaseResponse(TestCaseBase):
+    id: int
+
+    class Config:
+        from_attributes = True 
 
 class TechNoteResponse(BaseModel):
     id: int
@@ -245,10 +257,16 @@ class TechNoteResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class TestCaseResponse(BaseModel):
+class StoryImageCreate(BaseModel):
+    url: str
+    caption: Optional[str] = None
+
+class StoryImageResponse(BaseModel):
     id: int
-    description: str
     user_story_id: int
+    url: str
+    caption: Optional[str] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -261,9 +279,10 @@ class UserStoryUpdate(BaseModel):
     i_want: Optional[str] = None
     so_that: Optional[str] = None
     status: Optional[str] = None
+    code: Optional[str] = None
     acceptance_criteria: Optional[List[str]] = None
     tech_notes: Optional[List[str]] = None
-    test_cases: Optional[List[str]] = None
+    test_cases: Optional[List[TestCaseCreate]] = None  # 
     
 class UserStoryCreate(BaseModel):
     epic_id: int
@@ -289,7 +308,8 @@ class UserStoryResponse(BaseModel):
     acceptance_criteria: List[AcceptanceCriteriaResponse] = []
     tech_notes: List[TechNoteResponse] = []
     test_cases: List[TestCaseResponse] = []
-
+    images: List[StoryImageResponse] = []
+    
     class Config:
         from_attributes = True
 
@@ -328,6 +348,9 @@ class SuggestNFRRefineResponse(BaseModel):
     category: str
     description: str
 
+class NFRUpdate(BaseModel):
+    category: Optional[str] = None
+    description: Optional[str] = None
 # ================= JOURNEYS =================
 
 class JourneyStepBulkItem(BaseModel):
