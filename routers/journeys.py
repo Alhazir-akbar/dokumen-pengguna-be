@@ -163,3 +163,49 @@ def generate_journey_steps(
 
     result = db.query(model.UserJourney).filter(model.UserJourney.id == id).first()
     return result
+
+@router.post("/steps/{step_id}/link-story", response_model=List[schemas.LinkedStoryResponse])
+def link_story_to_step(
+    step_id: int,
+    data: schemas.JourneyStoryLinkCreate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    step = db.query(model.JourneyStep).filter(model.JourneyStep.id == step_id).first()
+    if not step:
+        raise HTTPException(status_code=404, detail="Journey step tidak ditemukan")
+
+    story = db.query(model.UserStory).filter(model.UserStory.id == data.story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story tidak ditemukan")
+
+    existing = db.query(model.JourneyStoryLink).filter_by(
+        journey_step_id=step_id, story_id=data.story_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Story ini sudah terhubung ke step tersebut")
+
+    link = model.JourneyStoryLink(journey_step_id=step_id, story_id=data.story_id)
+    db.add(link)
+    db.commit()
+    db.refresh(step)
+
+    return [l.story for l in step.story_links]  # ✅ mapping ke UserStory, bukan JourneyStoryLink
+
+
+@router.delete("/steps/{step_id}/link-story/{story_id}")
+def unlink_story_from_step(
+    step_id: int,
+    story_id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    link = db.query(model.JourneyStoryLink).filter_by(
+        journey_step_id=step_id, story_id=story_id
+    ).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Link tidak ditemukan")
+
+    db.delete(link)
+    db.commit()
+    return {"message": "Story berhasil dilepas dari step ini"}

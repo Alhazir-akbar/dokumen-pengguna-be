@@ -28,6 +28,29 @@ def create_epic(data: schemas.EpicCreate, db: Session = Depends(get_db), current
     db.refresh(db_epic)
     return db_epic
 
+@router.put("/epics/{id}", response_model=schemas.EpicResponse)
+def update_epic(
+    id: int,
+    data: schemas.EpicUpdate,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    db_epic = db.query(model.Epic).filter(model.Epic.id == id).first()
+    if not db_epic:
+        raise HTTPException(status_code=404, detail="Epic tidak ditemukan")
+
+    if data.name is not None:
+        trimmed = data.name.strip()
+        if not trimmed:
+            raise HTTPException(status_code=400, detail="Nama epic tidak boleh kosong")
+        db_epic.name = trimmed
+    if data.description is not None:
+        db_epic.description = data.description.strip() or None
+
+    db.commit()
+    db.refresh(db_epic)
+    return db_epic
+
 @router.get("", response_model=List[schemas.UserStoryResponse])
 def get_stories(project_id: int, db: Session = Depends(get_db), current_user: model.User = Depends(auth.get_current_user)):
     return db.query(model.UserStory).filter(model.UserStory.project_id == project_id).all()
@@ -536,8 +559,6 @@ def generate_story_links_ai(
     if not other_stories:
         raise HTTPException(status_code=400, detail="Tidak ada story lain dalam project ini untuk di-link")
 
-    # Pakai fallback kode berbasis ID kalau story belum punya `code` di database,
-    # supaya story lama yang belum punya kode tetap ikut dianalisis AI.
     def story_code(s):
         return s.code or f"US-{s.id}"
 
@@ -557,7 +578,6 @@ def generate_story_links_ai(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    # Mapping pakai kode yang sama (fallback ID) supaya cocok dengan yang dikirim ke AI
     code_to_story = {story_code(s): s for s in other_stories}
 
     for item in suggestion.links:
@@ -597,3 +617,26 @@ def generate_story_links_ai(
         ) for l in links_to
     ]
     return schemas.StoryLinksResponse(linked_to=linked_to, linked_from=linked_from)
+
+@router.get("/{story_id}/journeys", response_model=List[schemas.JourneyLinkedFromResponse])
+def get_journeys_linked_from_story(
+    story_id: int,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(auth.get_current_user)
+):
+    links = (
+        db.query(model.JourneyStoryLink)
+        .join(model.JourneyStep)
+        .filter(model.JourneyStoryLink.story_id == story_id)
+        .all()
+    )
+
+    return [
+        schemas.JourneyLinkedFromResponse(
+            journey_id=link.journey_step.user_journey.id,
+            journey_title=link.journey_step.user_journey.name,
+            step_id=link.journey_step.id,
+            step_title=link.journey_step.title,
+        )
+        for link in links
+    ]

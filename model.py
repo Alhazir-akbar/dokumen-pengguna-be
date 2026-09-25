@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime, timezone
@@ -148,7 +148,8 @@ class UserStory(Base):
     labels = Column(String, nullable=True)  # JSON-encoded list, e.g. '["Frontend","MVP"]'
     links_from = relationship("StoryLink", foreign_keys="StoryLink.source_story_id", back_populates="source_story", cascade="all, delete-orphan")
     links_to = relationship("StoryLink", foreign_keys="StoryLink.target_story_id", back_populates="target_story", cascade="all, delete-orphan")
-
+    journey_links = relationship("JourneyStoryLink", back_populates="story", cascade="all, delete-orphan")
+    
 class AcceptanceCriteria(Base):
     __tablename__ = "acceptance_criteria"
     id = Column(Integer, primary_key=True, index=True)
@@ -235,6 +236,22 @@ class JourneyStep(Base):
     description = Column(String, nullable=True)
     user_journey = relationship("UserJourney", back_populates="steps")
     persona = relationship("Persona", back_populates="journey_steps")
+    story_links = relationship("JourneyStoryLink", back_populates="journey_step", cascade="all, delete-orphan")
+
+class JourneyStoryLink(Base):
+    __tablename__ = "journey_story_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    journey_step_id = Column(Integer, ForeignKey("journey_steps.id", ondelete="CASCADE"), nullable=False)
+    story_id = Column(Integer, ForeignKey("user_stories.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    journey_step = relationship("JourneyStep", back_populates="story_links")
+    story = relationship("UserStory", back_populates="journey_links")
+
+    __table_args__ = (
+        UniqueConstraint("journey_step_id", "story_id", name="uq_journey_step_story"),
+    )
 
 # ===== FR007: BUILD MODULE =====
 # PERBAIKAN BESAR: TechStack, CodingGuideline, dan DevelopmentPlan diperluas supaya

@@ -202,6 +202,10 @@ class EpicResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class EpicUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    
 class AcceptanceCriteriaCreate(BaseModel):
     description: str
     user_story_id: int
@@ -402,6 +406,7 @@ class SuggestNFRRefineResponse(BaseModel):
 class NFRUpdate(BaseModel):
     category: Optional[str] = None
     description: Optional[str] = None
+
 # ================= JOURNEYS =================
 
 class JourneyStepBulkItem(BaseModel):
@@ -429,11 +434,22 @@ class JourneyStepResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class JourneyStoryLinkCreate(BaseModel):
+    story_id: int
+
+class LinkedStoryResponse(BaseModel):
+    id: int
+    code: Optional[str] = None
+    i_want: str
+
+    class Config:
+        from_attributes = True
+
 class UserJourneyCreate(BaseModel):
     name: str
     description: Optional[str] = None
     project_id: int
-    steps: List[JourneyStepBulkItem] = []   # <- sekarang aman, JourneyStepBulkItem udah didefinisikan di atas
+    steps: List[JourneyStepBulkItem] = []
 
 class UserJourneyUpdate(BaseModel):
     name: str
@@ -452,6 +468,15 @@ class UserJourneyResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class JourneyLinkedFromResponse(BaseModel):
+    journey_id: int
+    journey_title: str
+    step_id: int
+    step_title: str
+    link_type: str = "relates_to"
+
+    class Config:
+        from_attributes = True
 # ================= BUILD MODULE (FR007) =================
 
 class TechStackUpdate(BaseModel):
