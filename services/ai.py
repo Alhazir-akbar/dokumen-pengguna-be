@@ -231,67 +231,33 @@ class UserStorySuggestion(BaseModel):
         )
     )
     acceptance_criteria: List[str] = Field(
-        description=(
-            "Minimal 5 dan maksimal 7 kriteria penerimaan yang SPESIFIK dan TERUKUR/TESTABLE. Tulis "
-            "masing-masing dalam format 'Given [kondisi awal], When [aksi user], Then [hasil yang "
-            "diharapkan]'. Setiap kriteria harus bisa langsung dijadikan test case tanpa tafsir tambahan. "
-            "WAJIB mencakup: (1) minimal 1 skenario normal/happy path, (2) minimal 1 skenario validasi "
-            "input atau error handling, (3) minimal 1 batasan data/aturan bisnis dengan angka konkret "
-            "(contoh: 'Given user mengisi password kurang dari 8 karakter, When user menekan submit, "
-            "Then sistem menampilkan pesan error \\\"Password minimal 8 karakter\\\" dan form tidak terkirim'). "
-            "Hindari kriteria generik seperti 'Sistem harus berfungsi dengan baik'."
-        )
+        default_factory=list,
+        description="2-4 kriteria penerimaan terukur dalam format Given-When-Then."
     )
     tech_notes: List[str] = Field(
-        description=(
-            "Minimal 5 dan maksimal 7 catatan teknis yang membantu developer memahami PERTIMBANGAN "
-            "IMPLEMENTASI sebelum coding, bukan pengulangan acceptance criteria. Contoh hal yang wajib "
-            "dipertimbangkan dan disebutkan jika relevan: struktur data/field yang perlu disimpan di "
-            "database, endpoint API yang kemungkinan dibutuhkan (method + tujuan singkatnya), aturan "
-            "validasi di sisi backend vs frontend, kebutuhan keamanan spesifik (misal enkripsi, rate "
-            "limiting, otorisasi berdasarkan role), potensi dampak performa (misal butuh pagination, "
-            "caching, indexing), atau ketergantungan ke layanan/pihak ketiga (payment gateway, email "
-            "service, storage, dsb). Setiap catatan harus actionable, bukan generik seperti 'harus "
-            "diimplementasikan dengan baik'."
-        )
+        default_factory=list,
+        description="2-4 catatan teknis implementasi database, API, atau keamanan."
     )
     test_cases: List[str] = Field(
-        description=(
-            "Minimal 5 dan maksimal 7 skenario pengujian (test case) untuk tim QA, yang BERBEDA dari "
-            "acceptance criteria — acceptance criteria menyatakan syarat diterimanya fitur, sedangkan "
-            "test case ini adalah skenario uji konkret yang bisa langsung dieksekusi manual/otomatis. "
-            "Tulis dalam format: '[Nama skenario]: Langkah = [langkah-langkah uji], Hasil yang diharapkan "
-            "= [hasil]'. WAJIB mencakup kombinasi: uji fungsional normal, uji dengan data invalid/kosong/"
-            "melebihi batas, dan minimal 1 uji kondisi negatif (misal koneksi terputus di tengah proses, "
-            "submit ganda/double-click)."
-        )
+        default_factory=list,
+        description="2-4 skenario pengujian QA konkret."
     )
 
 class NFRSuggestion(BaseModel):
     category: str = Field(
-        description=(
-            "Kategori NFR. WAJIB mencakup minimal: Performance, Security, Availability, Usability, dan "
-            "Scalability — tambahkan kategori lain jika relevan dengan tipe aplikasi (misal: Compliance, "
-            "Maintainability, Compatibility, Data Integrity)."
-        )
+        default="General",
+        description="Kategori NFR (Performance, Security, Availability, Usability, Scalability)."
     )
     description: str = Field(
-        description=(
-            "Detail kebutuhan non-fungsional dengan TARGET KUANTITATIF/TERUKUR yang jelas (contoh: "
-            "'Waktu respons API tidak boleh lebih dari 2 detik untuk 95% request pada beban normal', "
-            "'Sistem harus mendukung minimal 500 pengguna aktif bersamaan tanpa penurunan performa "
-            "signifikan', 'Data sensitif harus dienkripsi menggunakan AES-256 saat disimpan dan TLS 1.2+ "
-            "saat transit', 'Uptime sistem minimal 99.5% per bulan'). Sebutkan juga bagaimana requirement "
-            "ini idealnya diverifikasi/diukur. Hindari deskripsi generik seperti 'harus cepat' atau "
-            "'harus aman' tanpa angka atau standar yang jelas."
-        )
+        default="",
+        description="Detail kebutuhan non-fungsional terukur."
     )
 
 class ProjectRequirementsOutput(BaseModel):
-    user_types: List[UserTypeSuggestion]
-    epics: List[EpicSuggestion]
-    user_stories: List[UserStorySuggestion]
-    nfrs: List[NFRSuggestion]
+    user_types: List[UserTypeSuggestion] = Field(default_factory=list)
+    epics: List[EpicSuggestion] = Field(default_factory=list)
+    user_stories: List[UserStorySuggestion] = Field(default_factory=list)
+    nfrs: List[NFRSuggestion] = Field(default_factory=list)
 
 # ================= TAMBAHAN: AI DRAFT & REFINE NFR (dipakai NonFunctionalList.tsx) =================
 
@@ -421,11 +387,6 @@ class UserJourneyStepSuggestion(BaseModel):
         )
     )
 
-api_key = os.getenv("GEMINI_API_KEY")
-gemini_client = genai.Client(api_key=api_key)
-client = gemini_client
-
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
 class UserJourneySuggestion(BaseModel):
     narrative: str = Field(
@@ -544,19 +505,21 @@ Tulis dalam Bahasa Indonesia.
     except Exception as e:
         raise RuntimeError(f"Gagal memanggil AI: {str(e)}")
     
-# ================= KONFIGURASI 3 PROVIDER AI =================
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+# ================= KONFIGURASI PROVIDER AI =================
+raw_gemini_keys = os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEYS = [k.strip() for k in re.split(r"[,;\n]+", raw_gemini_keys) if k.strip()]
+GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL_NAME", "meta-llama/llama-3.1-8b-instruct:free")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL_NAME", "qwen/qwen3.8-27b:free")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.1-8b-instant")
+GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "openai/gpt-oss-120b")
 
-gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+gemini_clients = [genai.Client(api_key=k) for k in GEMINI_API_KEYS]
+gemini_client = gemini_clients[0] if gemini_clients else None
 openrouter_client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL, timeout=None) if OPENROUTER_API_KEY else None
 groq_client = OpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL, timeout=None) if GROQ_API_KEY else None
 
@@ -566,16 +529,16 @@ _cycle_lock = threading.Lock()
 
 
 def _next_provider_order() -> List[str]:
-    """
-    Ambil urutan provider yang akan dicoba untuk satu kali panggilan generate.
-    Provider "giliran" (hasil round-robin) dicoba duluan, lalu 2 provider lain
-    dipakai sebagai fallback berurutan kalau yang giliran gagal/limit/error.
-    Dengan lock supaya aman kalau ada beberapa request generate bersamaan.
-    """
-    with _cycle_lock:
-        start = next(_provider_cycle)
-    idx = _PROVIDER_NAMES.index(start)
-    return _PROVIDER_NAMES[idx:] + _PROVIDER_NAMES[:idx]
+    """Coba Gemini terlebih dahulu (karena kualitas dan limit paling tinggi),
+    lalu fallback ke Groq dan OpenRouter jika Gemini error/limit."""
+    providers = []
+    if gemini_clients:
+        providers.append("gemini")
+    if groq_client:
+        providers.append("groq")
+    if openrouter_client:
+        providers.append("openrouter")
+    return providers if providers else ["gemini"]
 
 
 def _strip_json_fence(text: str) -> str:
@@ -604,7 +567,7 @@ def _extract_json_object(text: str) -> str:
 
 
 def _call_gemini(prompt: str, schema: Type[T], temperature: float, max_output_tokens: Optional[int] = None) -> T:
-    if gemini_client is None:
+    if not gemini_clients:
         raise RuntimeError("GEMINI_API_KEY tidak diset di .env")
 
     schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
@@ -620,26 +583,44 @@ def _call_gemini(prompt: str, schema: Type[T], temperature: float, max_output_to
         system_instruction=system_msg,
     )
     if max_output_tokens:
-        config_kwargs["max_output_tokens"] = max_output_tokens
+        config_kwargs["max_output_tokens"] = min(max_output_tokens, 8192)
 
-    response = gemini_client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(**config_kwargs),
-    )
+    errors = []
+    for idx, client in enumerate(gemini_clients):
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(**config_kwargs),
+                )
 
-    finish_reason = None
-    try:
-        finish_reason = response.candidates[0].finish_reason
-    except Exception:
-        pass
-    if finish_reason is not None and str(finish_reason).upper().find("MAX_TOKENS") != -1:
-        raise RuntimeError("Respons Gemini terpotong karena melebihi batas token maksimum.")
+                finish_reason = None
+                try:
+                    finish_reason = response.candidates[0].finish_reason
+                except Exception:
+                    pass
+                if finish_reason is not None and str(finish_reason).upper().find("MAX_TOKENS") != -1:
+                    raise RuntimeError("Respons Gemini terpotong karena melebihi batas token maksimum.")
 
-    raw_text = (response.text or "").strip()
-    candidate = _extract_json_object(raw_text)
-    result_json = json.loads(candidate)
-    return schema(**result_json)
+                raw_text = (response.text or "").strip()
+                candidate = _extract_json_object(raw_text)
+                result_json = json.loads(candidate)
+                return schema(**result_json)
+            except Exception as e:
+                err_str = str(e).lower()
+                is_quota = "429" in err_str or "quota" in err_str or "resource_exhausted" in err_str
+                is_503 = "503" in err_str or "demand" in err_str or "unavailable" in err_str
+                
+                if is_503 and attempt == 0:
+                    import time
+                    time.sleep(1.5)
+                    continue
+
+                errors.append(f"[Gemini Key #{idx+1}] {e}")
+                break  # Lanjut coba Gemini key berikutnya
+
+    raise RuntimeError("Semua Gemini API Key gagal: " + " || ".join(errors))
 
 
 def _call_openai_compatible(
@@ -668,25 +649,24 @@ def _call_openai_compatible(
         ],
         temperature=temperature,
     )
-    if max_tokens:
+    if max_tokens and max_tokens <= 4096:
         create_kwargs["max_tokens"] = max_tokens
 
     try:
         response = client.chat.completions.create(response_format={"type": "json_object"}, **create_kwargs)
     except Exception:
-        # Sebagian model/provider (terutama model gratis) belum tentu mendukung
-        # response_format json_object -> fallback ke request biasa, tetap mengandalkan
-        # instruksi di system prompt supaya outputnya JSON.
         response = client.chat.completions.create(**create_kwargs)
 
     choice = response.choices[0]
-    if getattr(choice, "finish_reason", None) == "length":
-        raise RuntimeError(f"Respons dari model '{model}' terpotong karena melebihi batas token maksimum.")
-
-    raw_text = choice.message.content or ""
+    raw_text = (choice.message.content or "").strip()
     candidate = _extract_json_object(raw_text)
-    result_json = json.loads(candidate)
-    return schema(**result_json)
+    try:
+        result_json = json.loads(candidate)
+        return schema(**result_json)
+    except Exception as parse_err:
+        if getattr(choice, "finish_reason", None) == "length":
+            raise RuntimeError(f"Respons dari model '{model}' terpotong karena melebihi batas token maksimum.")
+        raise parse_err
 
 def _generate_structured(prompt: str, schema: Type[T], temperature: float = 0.3, max_tokens: Optional[int] = None) -> T:
     """
@@ -800,30 +780,22 @@ def generate_project_requirements(
           lokasi, pekerjaan, latar belakang singkat, goals, frustrations) — lihat skema PersonaSuggestion.
 
     2. EPICS
-        - Susun 7 - 12 Epic (tidak perlu lebih) yang mencakup fungsi utama aplikasi, termasuk minimal:
-          autentikasi/manajemen akun dan fitur inti sesuai domain bisnis.
-        - Setiap Epic harus DETAIL dan KONKRET (lihat definisi field description pada skema): sebutkan
-          fitur/layar spesifik yang termasuk di dalamnya, bukan cuma nama kategori umum. Epic yang
-          kabur/generik akan membuat developer salah estimasi cakupan kerja.
-        - Setiap Epic harus punya cakupan yang jelas dan tidak tumpang tindih dengan Epic lain.
+        - Susun 4 - 7 Epic yang mencakup seluruh modul dan fitur penting aplikasi (termasuk autentikasi dan modul-modul bisnis utama).
+        - Setiap Epic harus DETAIL dan KONKRET: sebutkan fitur/layar spesifik yang termasuk di dalamnya.
 
     3. USER STORIES
-        - Setiap Epic memiliki 7-10 User Story PALING PENTING/PALING INTI saja (bukan mencoba
-          mencakup semua kemungkinan aksi) — kualitas dan kedalaman tiap story jauh lebih penting
-          daripada kuantitas. Lebih baik sedikit story yang sangat detail daripada banyak story
-          yang dangkal.
-        - User Story adalah bagian PALING PENTING dari dokumen ini — inilah yang langsung dipakai
-          developer untuk membangun fitur. WAJIB memenuhi seluruh sub-field berikut secara lengkap
-          dan detail (lihat definisi masing-masing field pada skema): description (naratif lengkap
-          dengan main flow dan edge case), acceptance_criteria (format Given-When-Then, terukur),
-          tech_notes (pertimbangan implementasi teknis konkret), dan test_cases (skenario uji QA
-          konkret, berbeda isinya dari acceptance_criteria).
-        - Terhubung ke Epic dan User Type yang sesuai (nama harus persis sama dengan yang
-          didefinisikan di atas, huruf besar/kecil dan ejaan harus identik).
+        - Susun 3 - 5 User Story untuk SETIAP Epic di atas secara lengkap dan komprehensif.
+        - Setiap User Story WAJIB memenuhi sub-field secara lengkap:
+          epic_name (nama Epic tempat story bernaung, harus cocok persis dengan salah satu nama Epic),
+          user_type (nama User Type yang melakukan aksi, harus cocok persis),
+          story_name (judul ringkas aksi/fitur),
+          description (naratif alur lengkap: 'Sebagai [user_type], saya ingin [fitur], agar [manfaat bisnis]...'), 
+          acceptance_criteria (2-4 kriteria Given-When-Then),
+          tech_notes (2-4 poin catatan teknis arsitektur/database/API), 
+          test_cases (2-4 skenario pengujian QA).
 
     4. NON-FUNCTIONAL REQUIREMENTS (NFR)
-        - Wajib mencakup minimal kategori: Performance, Security, Availability, Usability, Scalability.
-        - Setiap NFR harus punya target kuantitatif/terukur, bukan pernyataan kualitatif yang samar.
+        - Wajib mencakup minimal kategori: Performance, Security, Availability, Usability, Scalability dengan target kuantitatif yang terukur.
 
     5. KUALITAS & KEDALAMAN
         - Gunakan Bahasa Indonesia yang jelas dan profesional.

@@ -19,8 +19,11 @@ from routers.ai_rules import router as ai_rules_router
 from routers.profile import router as profile_router
 from routers import nfrs
 
-# Membuat seluruh tabel baru di database SQLite jika belum ada
-model.Base.metadata.create_all(bind=engine)
+# Membuat seluruh tabel baru di database jika belum ada
+try:
+    model.Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Notice: DB metadata.create_all skipped/safe: {e}")
 
 app = FastAPI(title="Userdoc Backend API")
 

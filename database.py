@@ -24,6 +24,7 @@ else:
     # Untuk Supabase PostgreSQL
     engine = create_engine(
         DATABASE_URL,
+        connect_args={"sslmode": "require"},
         pool_pre_ping=True,
         pool_recycle=300,       # daur ulang koneksi tiap 5 menit, sebelum server keburu drop
         pool_size=5,
