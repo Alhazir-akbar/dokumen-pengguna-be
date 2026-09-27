@@ -557,8 +557,8 @@ GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-openrouter_client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL, timeout=15.0) if OPENROUTER_API_KEY else None
-groq_client = OpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL, timeout=15.0) if GROQ_API_KEY else None
+openrouter_client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL, timeout=None) if OPENROUTER_API_KEY else None
+groq_client = OpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL, timeout=None) if GROQ_API_KEY else None
 
 _PROVIDER_NAMES = ["gemini", "openrouter", "groq"]
 _provider_cycle = itertools.cycle(_PROVIDER_NAMES)
