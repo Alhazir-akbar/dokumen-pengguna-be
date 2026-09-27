@@ -550,11 +550,11 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemi
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL_NAME", "meta-llama/llama-3.3-70b-instruct:free")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL_NAME", "meta-llama/llama-3.1-8b-instruct:free")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.1-8b-instant")
 
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 openrouter_client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL, timeout=None) if OPENROUTER_API_KEY else None
@@ -607,10 +607,17 @@ def _call_gemini(prompt: str, schema: Type[T], temperature: float, max_output_to
     if gemini_client is None:
         raise RuntimeError("GEMINI_API_KEY tidak diset di .env")
 
+    schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
+    system_msg = (
+        "Kamu adalah asisten yang WAJIB membalas HANYA dengan satu objek JSON valid yang "
+        "sesuai skema berikut, tanpa teks pembuka, tanpa penjelasan, tanpa markdown code fence:\n\n"
+        f"{schema_json}"
+    )
+
     config_kwargs = dict(
         response_mime_type="application/json",
-        response_schema=schema,
         temperature=temperature,
+        system_instruction=system_msg,
     )
     if max_output_tokens:
         config_kwargs["max_output_tokens"] = max_output_tokens
@@ -629,7 +636,9 @@ def _call_gemini(prompt: str, schema: Type[T], temperature: float, max_output_to
     if finish_reason is not None and str(finish_reason).upper().find("MAX_TOKENS") != -1:
         raise RuntimeError("Respons Gemini terpotong karena melebihi batas token maksimum.")
 
-    result_json = json.loads(response.text)
+    raw_text = (response.text or "").strip()
+    candidate = _extract_json_object(raw_text)
+    result_json = json.loads(candidate)
     return schema(**result_json)
 
 
