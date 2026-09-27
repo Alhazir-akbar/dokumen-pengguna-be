@@ -31,10 +31,19 @@ app = FastAPI(title="Userdoc Backend API")
 os.makedirs("static/story_images", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Mengonfigurasi CORS agar Frontend Next.js (port 3000) bisa mengakses API ini
+# Mengonfigurasi CORS agar Frontend Next.js (Lokal & Vercel Production) bisa mengakses API ini
+frontend_url = os.getenv("FRONTEND_URL")
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+if frontend_url:
+    allowed_origins.append(frontend_url.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
