@@ -254,10 +254,22 @@ class NFRSuggestion(BaseModel):
     )
 
 class ProjectRequirementsOutput(BaseModel):
-    user_types: List[UserTypeSuggestion] = Field(default_factory=list)
-    epics: List[EpicSuggestion] = Field(default_factory=list)
-    user_stories: List[UserStorySuggestion] = Field(default_factory=list)
-    nfrs: List[NFRSuggestion] = Field(default_factory=list)
+    user_types: List[UserTypeSuggestion] = Field(
+        min_length=2,
+        description="Daftar 2-3 tipe pengguna utama beserta persona fiktifnya."
+    )
+    epics: List[EpicSuggestion] = Field(
+        min_length=3,
+        description="Daftar 3-5 Epic modul fitur utama aplikasi."
+    )
+    user_stories: List[UserStorySuggestion] = Field(
+        min_length=4,
+        description="Daftar User Story. WAJIB membuat minimal 1-2 User Story untuk SETIAP Epic yang ada di atas (total 4-8 user stories). Jangan pernah mengosongkan list ini!"
+    )
+    nfrs: List[NFRSuggestion] = Field(
+        min_length=4,
+        description="Daftar 4-5 Non-Functional Requirements (Performance, Security, Reliability, Usability) dengan target kuantitatif konkret. Jangan pernah mengosongkan list ini!"
+    )
 
 # ================= TAMBAHAN: AI DRAFT & REFINE NFR (dipakai NonFunctionalList.tsx) =================
 
@@ -780,22 +792,22 @@ def generate_project_requirements(
           lokasi, pekerjaan, latar belakang singkat, goals, frustrations) — lihat skema PersonaSuggestion.
 
     2. EPICS
-        - Susun 4 - 7 Epic yang mencakup seluruh modul dan fitur penting aplikasi (termasuk autentikasi dan modul-modul bisnis utama).
+        - Susun 3 - 5 Epic utama yang mencakup modul-modul penting aplikasi (misal: Autentikasi & Akun, Modul Inti 1, Modul Inti 2, Manajemen & Laporan).
         - Setiap Epic harus DETAIL dan KONKRET: sebutkan fitur/layar spesifik yang termasuk di dalamnya.
 
     3. USER STORIES
-        - Susun 3 - 5 User Story untuk SETIAP Epic di atas secara lengkap dan komprehensif.
+        - WAJIB membuat minimal 1 - 2 User Story untuk MASING-MASING Epic yang didefinisikan di atas (total 4 - 8 user stories di array user_stories). Jangan sampai ada Epic yang 0 story!
         - Setiap User Story WAJIB memenuhi sub-field secara lengkap:
-          epic_name (nama Epic tempat story bernaung, harus cocok persis dengan salah satu nama Epic),
-          user_type (nama User Type yang melakukan aksi, harus cocok persis),
-          story_name (judul ringkas aksi/fitur),
-          description (naratif alur lengkap: 'Sebagai [user_type], saya ingin [fitur], agar [manfaat bisnis]...'), 
-          acceptance_criteria (2-4 kriteria Given-When-Then),
-          tech_notes (2-4 poin catatan teknis arsitektur/database/API), 
-          test_cases (2-4 skenario pengujian QA).
+          epic_name: Nama Epic tempat story ini bernaung (HARUS cocok persis dengan salah satu nama Epic di atas),
+          user_type: Nama tipe pengguna yang melakukan aksi (HARUS cocok persis dengan salah satu User Type di atas),
+          story_name: Judul ringkas fitur/aksi,
+          description: Narasi alur fitur lengkap ('Sebagai [user_type], saya ingin [fitur], agar [manfaat bisnis]...'), 
+          acceptance_criteria: 2-3 kriteria Given-When-Then,
+          tech_notes: 2-3 poin catatan teknis arsitektur/database/API, 
+          test_cases: 2-3 skenario pengujian QA.
 
     4. NON-FUNCTIONAL REQUIREMENTS (NFR)
-        - Wajib mencakup minimal kategori: Performance, Security, Availability, Usability, Scalability dengan target kuantitatif yang terukur.
+        - WAJIB menyusun minimal 4 - 5 NFR (Performance, Security, Availability, Usability, Reliability) dengan target angka kuantitatif yang terukur di array nfrs. Jangan kosongkan array nfrs!
 
     5. KUALITAS & KEDALAMAN
         - Gunakan Bahasa Indonesia yang jelas dan profesional.
