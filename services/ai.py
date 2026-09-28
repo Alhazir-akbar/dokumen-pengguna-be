@@ -599,7 +599,7 @@ def _call_gemini(prompt: str, schema: Type[T], temperature: float, max_output_to
 
     errors = []
     for idx, client in enumerate(gemini_clients):
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 response = client.models.generate_content(
                     model=GEMINI_MODEL,
@@ -624,9 +624,9 @@ def _call_gemini(prompt: str, schema: Type[T], temperature: float, max_output_to
                 is_quota = "429" in err_str or "quota" in err_str or "resource_exhausted" in err_str
                 is_503 = "503" in err_str or "demand" in err_str or "unavailable" in err_str
                 
-                if is_503 and attempt == 0:
+                if is_503 and attempt < 2:
                     import time
-                    time.sleep(1.5)
+                    time.sleep(2.0 * (attempt + 1))
                     continue
 
                 errors.append(f"[Gemini Key #{idx+1}] {e}")
@@ -660,9 +660,8 @@ def _call_openai_compatible(
             {"role": "user", "content": prompt},
         ],
         temperature=temperature,
+        max_tokens=min(max_tokens or 4096, 4096),
     )
-    if max_tokens and max_tokens <= 4096:
-        create_kwargs["max_tokens"] = max_tokens
 
     try:
         response = client.chat.completions.create(response_format={"type": "json_object"}, **create_kwargs)
