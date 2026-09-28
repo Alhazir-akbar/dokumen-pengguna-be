@@ -3,7 +3,7 @@ import re
 import json
 import threading
 import itertools
-from typing import List, Optional, Type, TypeVar
+from typing import List, Optional, Type, TypeVar, Union
 
 from pydantic import BaseModel, Field
 from google import genai
@@ -255,20 +255,22 @@ class NFRSuggestion(BaseModel):
 
 class ProjectRequirementsOutput(BaseModel):
     user_types: List[UserTypeSuggestion] = Field(
-        min_length=2,
-        description="Daftar 2-3 tipe pengguna utama beserta persona fiktifnya."
+        min_length=1,
+        default_factory=list,
+        description="Daftar 2-3 tipe pengguna utama beserta persona ringkasnya."
     )
     epics: List[EpicSuggestion] = Field(
-        min_length=3,
+        min_length=1,
+        default_factory=list,
         description="Daftar 3-5 Epic modul fitur utama aplikasi."
     )
     user_stories: List[UserStorySuggestion] = Field(
-        min_length=4,
-        description="Daftar User Story. WAJIB membuat minimal 1-2 User Story untuk SETIAP Epic yang ada di atas (total 4-8 user stories). Jangan pernah mengosongkan list ini!"
+        default_factory=list,
+        description="Daftar User Story awal (bisa kosong dan ditambahkan nanti per-modul)."
     )
     nfrs: List[NFRSuggestion] = Field(
-        min_length=4,
-        description="Daftar 4-5 Non-Functional Requirements (Performance, Security, Reliability, Usability) dengan target kuantitatif konkret. Jangan pernah mengosongkan list ini!"
+        default_factory=list,
+        description="Daftar NFR awal (bisa kosong dan ditambahkan nanti per-kategori)."
     )
 
 # ================= TAMBAHAN: AI DRAFT & REFINE NFR (dipakai NonFunctionalList.tsx) =================
@@ -520,7 +522,15 @@ Tulis dalam Bahasa Indonesia.
 # ================= KONFIGURASI PROVIDER AI =================
 raw_gemini_keys = os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY", "")
 GEMINI_API_KEYS = [k.strip() for k in re.split(r"[,;\n]+", raw_gemini_keys) if k.strip()]
-GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+_primary_gemini_model = os.getenv("GEMINI_MODEL_NAME") or os.getenv("GEMINI_MODEL") or "gemini-2.0-flash"
+GEMINI_MODELS = list(dict.fromkeys([
+    _primary_gemini_model,
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-lite"
+]))
+GEMINI_MODEL = GEMINI_MODELS[0]
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
@@ -528,7 +538,14 @@ OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL_NAME", "qwen/qwen3.8-27b:free")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "openai/gpt-oss-120b")
+_primary_groq_model = os.getenv("GROQ_MODEL_NAME") or "openai/gpt-oss-120b"
+GROQ_MODELS = list(dict.fromkeys([
+    _primary_groq_model,
+    "openai/gpt-oss-120b",
+    "llama-3.3-70b-versatile",
+    "openai/gpt-oss-20b"
+]))
+GROQ_MODEL = GROQ_MODELS[0]
 
 gemini_clients = [genai.Client(api_key=k) for k in GEMINI_API_KEYS]
 gemini_client = gemini_clients[0] if gemini_clients else None
@@ -598,53 +615,54 @@ def _call_gemini(prompt: str, schema: Type[T], temperature: float, max_output_to
         config_kwargs["max_output_tokens"] = min(max_output_tokens, 8192)
 
     errors = []
-    for idx, client in enumerate(gemini_clients):
-        for attempt in range(3):
-            try:
-                response = client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(**config_kwargs),
-                )
-
-                finish_reason = None
+    for model_name in GEMINI_MODELS:
+        for idx, client in enumerate(gemini_clients):
+            for attempt in range(2):
                 try:
-                    finish_reason = response.candidates[0].finish_reason
-                except Exception:
-                    pass
-                if finish_reason is not None and str(finish_reason).upper().find("MAX_TOKENS") != -1:
-                    raise RuntimeError("Respons Gemini terpotong karena melebihi batas token maksimum.")
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(**config_kwargs),
+                    )
 
-                raw_text = (response.text or "").strip()
-                candidate = _extract_json_object(raw_text)
-                result_json = json.loads(candidate)
-                return schema(**result_json)
-            except Exception as e:
-                err_str = str(e).lower()
-                is_quota = "429" in err_str or "quota" in err_str or "resource_exhausted" in err_str
-                is_503 = "503" in err_str or "demand" in err_str or "unavailable" in err_str
-                
-                if is_503 and attempt < 2:
-                    import time
-                    time.sleep(2.0 * (attempt + 1))
-                    continue
+                    finish_reason = None
+                    try:
+                        finish_reason = response.candidates[0].finish_reason
+                    except Exception:
+                        pass
+                    if finish_reason is not None and str(finish_reason).upper().find("MAX_TOKENS") != -1:
+                        raise RuntimeError("Respons Gemini terpotong karena melebihi batas token maksimum.")
 
-                errors.append(f"[Gemini Key #{idx+1}] {e}")
-                break  # Lanjut coba Gemini key berikutnya
+                    raw_text = (response.text or "").strip()
+                    candidate = _extract_json_object(raw_text)
+                    result_json = json.loads(candidate)
+                    return schema(**result_json)
+                except Exception as e:
+                    err_str = str(e).lower()
+                    is_503 = "503" in err_str or "demand" in err_str or "unavailable" in err_str
+                    
+                    if is_503 and attempt < 1:
+                        import time
+                        time.sleep(1.5 * (attempt + 1))
+                        continue
 
-    raise RuntimeError("Semua Gemini API Key gagal: " + " || ".join(errors))
+                    errors.append(f"[Gemini {model_name} Key #{idx+1}] {e}")
+                    break  # Lanjut ke key / model berikutnya
+
+    raise RuntimeError("Semua Gemini API Key & Model gagal: " + " || ".join(errors))
 
 
 def _call_openai_compatible(
     client: Optional[OpenAI],
-    model: str,
+    models: Union[str, List[str]],
     prompt: str,
     schema: Type[T],
     temperature: float,
     max_tokens: Optional[int] = None,
 ) -> T:
+    model_list = [models] if isinstance(models, str) else models
     if client is None:
-        raise RuntimeError(f"API key untuk model '{model}' tidak diset di .env")
+        raise RuntimeError(f"API key untuk model '{model_list[0]}' tidak diset di .env")
 
     schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
     system_msg = (
@@ -653,51 +671,53 @@ def _call_openai_compatible(
         f"{schema_json}"
     )
 
-    create_kwargs = dict(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=temperature,
-        max_tokens=min(max_tokens or 4096, 4096),
-    )
+    errors = []
+    for model in model_list:
+        create_kwargs = dict(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=temperature,
+            max_tokens=min(max_tokens or 4096, 4096),
+        )
 
-    try:
-        response = client.chat.completions.create(response_format={"type": "json_object"}, **create_kwargs)
-    except Exception:
-        response = client.chat.completions.create(**create_kwargs)
+        try:
+            try:
+                response = client.chat.completions.create(response_format={"type": "json_object"}, **create_kwargs)
+            except Exception:
+                response = client.chat.completions.create(**create_kwargs)
 
-    choice = response.choices[0]
-    raw_text = (choice.message.content or "").strip()
-    candidate = _extract_json_object(raw_text)
-    try:
-        result_json = json.loads(candidate)
-        return schema(**result_json)
-    except Exception as parse_err:
-        if getattr(choice, "finish_reason", None) == "length":
-            raise RuntimeError(f"Respons dari model '{model}' terpotong karena melebihi batas token maksimum.")
-        raise parse_err
+            choice = response.choices[0]
+            raw_text = (choice.message.content or "").strip()
+            candidate = _extract_json_object(raw_text)
+            result_json = json.loads(candidate)
+            return schema(**result_json)
+        except Exception as e:
+            errors.append(f"[{model}] {e}")
+            continue
+
+    raise RuntimeError("Semua model gagal: " + " || ".join(errors))
 
 def _generate_structured(prompt: str, schema: Type[T], temperature: float = 0.3, max_tokens: Optional[int] = None) -> T:
     """
     Dispatcher utama untuk semua generate yang butuh output terstruktur (JSON -> Pydantic).
     Urutan provider mengikuti round-robin (_next_provider_order), dengan fallback otomatis
-    ke provider berikutnya kalau salah satu gagal (limit, error jaringan, output terpotong,
-    atau JSON tidak valid).
+    ke provider berikutnya kalau salah satu gagal.
     """
     errors: List[str] = []
     for provider in _next_provider_order():
         try:
             if provider == "gemini":
                 return _call_gemini(prompt, schema, temperature, max_output_tokens=max_tokens)
+            elif provider == "groq":
+                return _call_openai_compatible(
+                    groq_client, GROQ_MODELS, prompt, schema, temperature, max_tokens=max_tokens
+                )
             elif provider == "openrouter":
                 return _call_openai_compatible(
                     openrouter_client, OPENROUTER_MODEL, prompt, schema, temperature, max_tokens=max_tokens
-                )
-            elif provider == "groq":
-                return _call_openai_compatible(
-                    groq_client, GROQ_MODEL, prompt, schema, temperature, max_tokens=max_tokens
                 )
         except Exception as e:
             errors.append(f"[{provider}] {e}")
@@ -780,48 +800,38 @@ def generate_project_requirements(
     ATURAN KHUSUS AI (WAJIB DIPATUHI):
     {rules_prompt}
 
-    INSTRUKSI PENYUSUNAN (WAJIB DIIKUTI SECARA KETAT, JANGAN DIRINGKAS):
+    INSTRUKSI PENYUSUNAN (RINGKAS, PADAT, & ADA ISINYA):
 
-    1. USER TYPES
-        - Identifikasi seluruh tipe pengguna relevan berdasarkan target pengguna dan domain bisnis.
-        - Deskripsi tiap tipe CUKUP SINGKAT (maksimal 6 kalimat) — cukup identitas, peran, dan tingkat
-          akses. JANGAN dibuat panjang; kedalaman requirement difokuskan ke Epic dan User Story di
-          bawah, bukan di sini.
-        - Setiap User Type WAJIB disertai TEPAT 1 contoh persona fiktif yang konkret (nama, usia,
-          lokasi, pekerjaan, latar belakang singkat, goals, frustrations) — lihat skema PersonaSuggestion.
+    1. USER TYPES (2 - 3 tipe pengguna)
+        - Identifikasi 2 sampai 3 tipe pengguna utama.
+        - Deskripsi singkat (2-3 kalimat) mengenai peran dan hak aksesnya.
+        - Setiap User Type sertakan 1 persona fiktif ringkas (nama, usia, pekerjaan, goals singkat).
 
-    2. EPICS
-        - Susun 3 - 5 Epic utama yang mencakup modul-modul penting aplikasi (misal: Autentikasi & Akun, Modul Inti 1, Modul Inti 2, Manajemen & Laporan).
-        - Setiap Epic harus DETAIL dan KONKRET: sebutkan fitur/layar spesifik yang termasuk di dalamnya.
+    2. EPICS (3 - 4 modul utama)
+        - Susun 3 sampai 4 Epic modul utama (contoh: Autentikasi & Akun, Fitur Utama 1, Fitur Utama 2, Manajemen/Laporan).
+        - Deskripsi 2-3 kalimat yang menjelaskan cakupan modul tersebut.
 
-    3. USER STORIES
-        - WAJIB membuat minimal 1 - 2 User Story untuk MASING-MASING Epic yang didefinisikan di atas (total 4 - 8 user stories di array user_stories). Jangan sampai ada Epic yang 0 story!
-        - Setiap User Story WAJIB memenuhi sub-field secara lengkap:
-          epic_name: Nama Epic tempat story ini bernaung (HARUS cocok persis dengan salah satu nama Epic di atas),
-          user_type: Nama tipe pengguna yang melakukan aksi (HARUS cocok persis dengan salah satu User Type di atas),
-          story_name: Judul ringkas fitur/aksi,
-          description: Narasi alur fitur lengkap ('Sebagai [user_type], saya ingin [fitur], agar [manfaat bisnis]...'), 
-          acceptance_criteria: 2-3 kriteria Given-When-Then,
-          tech_notes: 2-3 poin catatan teknis arsitektur/database/API, 
-          test_cases: 2-3 skenario pengujian QA.
+    3. USER STORIES (1 - 2 story simpel per Epic)
+        - Buat 1 sampai 2 User Story inti yang ringkas untuk tiap Epic (total 3 - 6 user stories).
+        - Format ringkas & jelas:
+          * epic_name: nama Epic terkait (HARUS sama persis dengan nama Epic di atas)
+          * user_type: nama User Type terkait (HARUS sama persis dengan nama User Type di atas)
+          * story_name: judul fitur ringkas (contoh: 'Login Pengguna', 'Pencarian Dokumen')
+          * description: 2-3 kalimat narasi ringkas ('Sebagai [user_type], saya ingin [fitur], agar [manfaat bisnis]...')
+          * acceptance_criteria: 1-2 poin Given-When-Then ringkas
+          * tech_notes: 1-2 poin catatan teknis ringkas
+          * test_cases: 1-2 poin skenario pengujian ringkas
 
-    4. NON-FUNCTIONAL REQUIREMENTS (NFR)
-        - WAJIB menyusun minimal 4 - 5 NFR (Performance, Security, Availability, Usability, Reliability) dengan target angka kuantitatif yang terukur di array nfrs. Jangan kosongkan array nfrs!
+    4. NON-FUNCTIONAL REQUIREMENTS (2 - 3 NFR inti)
+        - Buat 2 sampai 3 NFR penting (kategori: Performance, Security, Usability) dengan target yang terukur dan ringkas (1-2 kalimat).
 
-    5. KUALITAS & KEDALAMAN
-        - Gunakan Bahasa Indonesia yang jelas dan profesional.
-        - JANGAN membuat requirement singkat/generik hanya demi menghemat panjang output. Kedalaman
-          dan kejelasan lebih penting daripada keringkasan. Bayangkan seorang developer junior yang
-          belum pernah bicara dengan stakeholder harus bisa membangun fitur dengan benar HANYA dari
-          membaca dokumen ini, tanpa bertanya lagi.
-        - Pastikan konsistensi penamaan (epic_name, user_type) di seluruh story agar validasi data
-          tidak gagal.
-
-    Hasilkan output sesuai skema JSON yang telah ditentukan.
+    5. FORMAT
+        - Gunakan Bahasa Indonesia yang baik dan profesional.
+        - Jaga isi tetap ringkas, tidak bertele-tele, dan hasilkan output sesuai skema JSON.
     """
 
     try:
-        return _generate_structured(prompt, ProjectRequirementsOutput, temperature=0.3, max_tokens=32768)
+        return _generate_structured(prompt, ProjectRequirementsOutput, temperature=0.3, max_tokens=4096)
     except Exception as e:
         raise RuntimeError(f"Gagal generate project requirements: {str(e)}") from e
 
